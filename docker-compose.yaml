@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+
+  ftpd:
+    ports:
+     - "21:21"
+     - "${HTTP_OUT_PORT}:80"
+     - "20000-20010:20000-20010"
+    image: futuregateway/ftpd 
+    volumes:
+     - palms_ftpdir:/ftp
+    networks:
+     - palms_network
+    env_file:
+     - palms.env
+
+  repast:
+    depends_on:
+     - ftpd
+    image: futuregateway/repast
+    networks:
+     - palms_network
+    env_file:
+     - palms.env
+
+volumes:
+ palms_ftpdir:
+networks:
+ palms_network:
