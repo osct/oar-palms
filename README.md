@@ -1,4 +1,4 @@
-# OAR Reproducibility for REPAST
+# OAR Reproducibility for PALMS
 PALMS is a micro-simulation that predicts the lifelong physical activity behaviour of a population taking into account individual characteristics and their effect on physical activity over time. The model produces individual and aggregated quantitative outputs for quality of life and health conditions related costs.
 This repository allow to reproduce REPAST executions starting from entries registered into the Open [Access Reposigory (OAR)][OAR]
 
