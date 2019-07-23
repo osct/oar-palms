@@ -5,6 +5,8 @@
 # Author: <riccardo.bruno@ct.infn.it>
 
 HOST=fgsg.ct.infn.it
+DOI=https://doi.org
+OAR=https://www.openaccessrepository.org
 
 # Instantiate a docker-compose.yaml file starting from a template, using
 # several environment variables as input
@@ -93,6 +95,14 @@ execute_PALMS() {
   # To recover ouptut files use:
   curl $FILE_URL > output.tar
 
+  # In case of DOIs, output file may have a different name
+  [ "$PARAMS_NAME" != "" ] &&\
+    docker exec $HTTPD_CNT rm -f /ftp/$CUSER/$REPAST_OUT &&\
+    REPAST_OUT="$PARAMS_NAME.tar" &&\
+    cp output.tar $REPAST_OUT &&\
+    FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT} &&\
+    docker cp $REPAST_OUT $HTTPD_CNT:/ftp/$CUSER/$REPAST_OUT
+
   # Prepare successful execution output
   cat >$JSON_OUT <<EOF
 {
@@ -110,6 +120,42 @@ execute_PALMS() {
    "url": "${FILE_URL}"}
 }
 EOF
+}
+
+# Execute a given PALMS execution starting from DOI numbers as model
+# and parameters files
+# Arguments:
+#
+#    <user> The user to associate the allocated HTTP for output
+#    <model_DOI> DOI number of the model file
+#    <params_DOU> DOI number of the parameters file
+#    [port] The HTTP port number associated to the user
+#
+execute_DOIPALMS() {
+  CUSER=$1
+  MODEL_DOI=$2
+  PARAMS_DOI=$3
+  PORT=$4
+  FTPPASS=$5
+  MODEL_URL=$(curl -sL $DOI/$MODEL_DOI |\
+            grep model.tar |\
+            grep "href=\"http" |\
+            awk -F'"' '{ print $6 }')
+  PARAMS_URL=$(curl -sL $DOI/$PARAMS_DOI |\
+             grep xml |\
+             grep "href=\"http" |\
+             awk -F'"' '{ print $6 }')
+  PARAMS_NAME=$(curl -sL $DOI/$PARAMS_DOI |\
+              grep "<h1>" |\
+              awk -F'>' '{ print $2}' |\
+              awk -F'<' '{ print tolower($1) }')
+  echo "model: $MODEL_URL - params: $PARAMS_URL" 
+  [ "$MODEL_URL" != "" -a\
+    "$PARAMS_URL" != "" ] &&\
+    execute_PALMS $CUSER $MODEL_URL $PARAMS_URL $PORT $FTPPASS &&\
+    return 0
+  ERR_MSG="Unable to execute DOI based PALMS execution, model and/or parameters files not available"
+  return 1
 }
 
 # Release resouces assigned to the user owning given HTTPD port number
@@ -171,6 +217,63 @@ list_PALMS() {
   printf "]}"
 }
 
+# Clear files stored in HTTPD/FTP server
+#
+# Arguments:
+#    <user>: Username associated to the HTTPD server
+#    <port>: HTTPD port number of the HTTPD server
+#    [files]: List of files to remove 
+clear_PALMS() {
+
+  CUSER=$1
+  [ "$CUSER" = "" ] &&\
+    ERR_MSG="No username specified" &&\
+    return 1
+
+  PORT=$2
+  [ "$PORT" = "" ] &&\
+    ERR_MSG="No port specified" &&\
+    return 1
+
+  FILES=$3
+
+  HTTPD_CNT=$(docker ps -a | grep osct/ftpd | grep $PORT | awk '{ print $1 }')
+
+  [ "$HTTPD_CNT" = "" ] &&\
+    ERR_MSG="Unable to identify container Id running ftpd on port: $PORT" &&\
+    return 1
+
+  RMFILES=$(docker exec $HTTPD_CNT /bin/ls -1 /ftp/$CUSER)
+  RMFILES_LIST=""
+  for f in $RMFILES; do
+    if [ "$FILES" = "" ]; then
+      docker exec $HTTPD_CNT rm -f /ftp/$CUSER/$f
+      [ -z $RMFILES_LIST ] &&\
+        RMFILES_LIST=$f ||\
+	RMFILES_LIST="$RMFILES_LIST, $f"
+
+    else
+      if [ $(echo $FILES | grep $f | wc -l) -ne 0 ]; then 
+        docker exec $HTTPD_CNT rm -f /ftp/$CUSER/$f &&\
+        [ -z $RMFILES_LIST ] &&\
+	  RMFILES_LIST=$f ||\
+	  RMFILES_LIST="$RMFILES_LIST, $f"
+      fi
+    fi
+  done
+
+  [ -z $RMFILES_LIST ] &&
+    RMMSG="No files removed" ||\
+    RMMSG="Output files: $RMFILES_LIST for user $CUSER have been deleted"
+  cat >$JSON_OUT <<EOF
+{
+ "user": "${CUSER}",
+ "container": "${HTTPD_CNT}",
+ "message": "${RMMSG}"
+}
+EOF
+}
+
 #
 # Main code
 #
@@ -204,6 +307,10 @@ CMD=$1
 
 # Process given command
 case $CMD in
+  # Process 'doi-submit' command
+  "doi-submit")
+    execute_DOIPALMS ${@:2}
+    ;; 
 
   # Process 'submit' command
   "submit") 
@@ -218,6 +325,11 @@ case $CMD in
   # List available files
   "list")
     list_PALMS ${@:2}
+    ;;
+
+  # Clear all files in ftp server
+  "clear")
+    clear_PALMS ${@:2}
     ;;
 
   # Notify unknown/unsupported commands

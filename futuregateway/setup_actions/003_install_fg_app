@@ -1,0 +1,280 @@
+#!/bin/bash
+
+SHDESC="Register the application on the FutureGateway"
+DESC="OAR-PALMS (REPAST) has to be installed in the Futuregateway"
+
+find_fgapiserver() {
+  echo "Identifying container for fgapiserver component"
+  FGAPI_CONTAINER=$(docker ps | grep fgapiserver | awk '{ print $1 }')
+  [ "$FGAPI_CONTAINER" = "" ] && echo "It seems no docker container exists for fgapiserver component" && return 1
+  echo "fgAPIServer container id: $FGAPI_CONTAINER" &&\
+  FGAPI_IP=$(sudo docker inspect $FGAPI_CONTAINER |\
+             jq '.[].NetworkSettings.Networks' |\
+	     grep IPAddress |\
+	     awk '{ print $2 }' |\
+	     sed s/\"//g |\
+	     sed s/,//g)
+  [ "$FGAPI_IP" == "" ] && echo "No IP address is available from fgapiserver container: $FGAPI_CONTAINER" && return 1
+  echo "Checking APIs from IP: $FGAPI_IP"
+  FGAPI_RES=$(curl -s -H "Authorization: $FGAPI_TOKEN" http://$FGAPI_IP/v1.0/)
+  [ "$FGAPI_RES" == "" ] && echo "No answer retrieved from fgapiserver API test" && return 1
+  return 0 
+}
+
+install_infrastructure() {
+  echo "Verifying if the ssh infrastructure $APP_INFRA_NAME exists"
+  INFRA_ID=$(curl\
+             -s\
+              -H "Authorization: $FGAPI_TOKEN"\
+             http://$FGAPI_IP/v1.0/infrastructures |\
+             jq '.infrastructures[]' |\
+             jq '.name + " " +.id' |\
+             grep $APP_INFRA_NAME |\
+	     xargs echo |\
+	     awk '{ print $2 }')
+  [ "$INFRA_ID" != "" ] &&\
+    echo "The infrastructure '$APP_INFRA_NAME' exist, having id: '$INFRA_ID'" && return 0
+  echo "The infrastructure '$APP_INFRA_NAME' does not exists, creating it"
+  echo "Creating infrastructure definition json file"
+  mktmp &&\
+  INFRA_JSON=$RES &&\
+  cat >$INFRA_JSON <<EOF
+{
+      "name": "${APP_INFRA_NAME}",
+      "virtual": false,
+      "enabled": true,
+      "parameters": [
+        {
+          "value": "ssh://$DOCKER_USER@$DOCKER_USER_HOST",
+          "name": "jobservice"
+        },
+        {
+          "value": "${DOCKER_USER}",
+          "name": "username"
+        },
+        {
+          "value": "${DOCKER_USER_PASS}",
+          "name": "password"
+        }
+      ],
+      "description": "${APP_INFRA_DESC}"
+    }
+EOF
+  [ ! -f $IFNRA_JSON ] && echo "Unable to create infrastructure definition json file" && return 1
+  mktmp
+  CMD_OUT=$RES
+  INFRA_SETUP_CMD="curl\
+                   -s\
+                   -H \"Authorization: $FGAPI_TOKEN\"\
+                   -H \"Content-Type: application/json\"\
+                   -X POST\
+                   -d '"$(cat $INFRA_JSON)"'\
+                   http://$FGAPI_IP/v1.0/infrastructures" 
+  debugging && echo "Executing infrastructure setup API command: '$INFRA_SETUP_CMD'" 
+  eval "$INFRA_SETUP_CMD" | tee $CMD_OUT
+  INFRA_ID=$(cat $CMD_OUT | jq .id | xargs echo)
+  [ "$INFRA_ID" == "" ] && echo "Application was not successfully created" && return 1
+  echo "Verifying new infrastructure having id: $IFRA_ID"
+  INFRA_VIEW_CMD="curl\
+                  -s\
+                  -H \"Authorization: $FGAPI_TOKEN\"\
+                  http://$FGAPI_IP/v1.0/infrastructures/$INFRA_ID"
+  eval "$INFRA_VIEW_CMD" | tee $CMD_OUT
+  return 0
+}
+
+install_application() {
+  echo "Verifying the app already exists"
+  APP_ID=$(curl\
+           -s\
+           -H "Authorization: $FGAPI_TOKEN"\
+           http://$FGAPI_IP/v1.0/applications |\
+           jq '.applications[]' |\
+           jq '.name + " " +.id' |\
+           grep $APP_NAME |\
+           xargs echo |\
+           awk '{ print $2 }')
+  [ "$APP_ID" != "" ] &&\
+    echo "Application '$APP_NAME' exists, having id: '$APP_ID'" &&\
+    return 0
+  echo "Application '$APP_NAME' does not exists, intalling it"
+  echo "Installing $APP_NAME application"
+  mktmp &&\
+  APP_JSON=$RES &&\
+  cat >$APP_JSON <<EOF
+{
+  "outcome": "JOB",
+  "description": "${APP_NAME} application for fgsg",
+  "name": "${APP_NAME}",
+  "enabled": true,
+  "files": [ "pilot_script.sh", "docker-compose.yaml_template" ],
+  "parameters": [
+    {
+      "description": "Application level Executor Interface",
+      "value": "GridEngine",
+      "name": "target_executor"
+    },
+    {
+      "description": "Executable to call",
+      "value": "/bin/bash",
+      "name": "jobdesc_executable"
+    },
+    {
+      "description": "Arguments for executable",
+      "value": "pilot_script.sh",
+      "name": "jobdesc_arguments"
+    },
+    {
+      "description": "Executable output file",
+      "value": "output.txt",
+      "name": "jobdesc_output"
+    },
+    {
+      "description": "Executable error file",
+      "value": "error.txt",
+      "name": "jobdesc_error"
+    }
+  ],
+  "infrastructures": [ "${INFRA_ID}" ]
+}
+EOF
+  [ ! -f $IFNRA_JSON ] && echo "Unable to create application definition json file" && return 1
+  mktmp
+  CMD_OUT=$RES
+  APP_SETUP_CMD="curl\
+                 -s\
+                 -H \"Authorization: $FGAPI_TOKEN\"\
+                 -H \"Content-Type: application/json\"\
+                 -X POST\
+                 -d '"$(cat $APP_JSON)"'\
+                 http://$FGAPI_IP/v1.0/applications"
+  debugging && echo "Executing application setup API command: '$APP_SETUP_CMD'" 
+  eval "$APP_SETUP_CMD" | tee $CMD_OUT
+  APP_ID=$(cat $CMD_OUT | jq .id | xargs echo)
+  [ "$APP_ID" == "" ] && echo "Application '$APP_NAME' was not successfully created" && return 1
+  echo "Application '$APP_NAME' successfully created"
+  return 0
+}
+
+upload_file() {
+  FILE_NAME="$1"
+  [ "$FILE_NAME" = "" ] &&\
+    echo "ERROR: Empty file name specified for upload" &&\
+    return 1
+  mktmp
+  CMD_FILE_OUT=$RES
+  echo "Checking files to upload"
+  APP_FILE_PATH_CMD="curl\
+                     -s\
+                     -H \"Authorization: $FGAPI_TOKEN\"\
+                     -H \"Content-Type: application/json\"\
+                     http://$FGAPI_IP/v1.0/applications/$APP_ID/input |\
+                     jq '.[]' |\
+                     jq '.name + " " + .path' |\
+                     xargs -I{} printf "{}\n" |\
+                     grep pilot_script.sh |\
+                     awk '{ print $2 }'"
+  debugging && echo "Retrieving path of '$FILE_NAME' file with API command: '$APP_FILE_PATH_CMD'"
+  eval "$APP_FILE_PATH_CMD" | tee $CMD_FILE_OUT
+  APP_FILE_PATH=$(cat $CMD_FILE_OUT)
+  [ "$APP_FILE_PATH" != "" ] &&\
+    echo "File '$FILE_NAME' has been already uploaded, having path: '$APP_FILE_PATH/$FILE_NAME'" &&\
+    return 0
+  echo "Uploading application file '$FILE_NAME'"
+  [ ! -f $APP_FILE_DIR/$FILE_NAME ] &&\
+    echo "Not foud necessary application file: '$APP_FILE_DIR/$FILE_NAME'" &&\
+    return 1
+  UPLOAD_APP_FILE_CMD="curl\
+                       -s\
+                       -H \"Authorization: $FGAPI_TOKEN\"\
+                       -F 'file[]=@$APP_FILE_DIR/$FILE_NAME'\
+                       http://$FGAPI_IP/v1.0/applications/$APP_ID/input"
+  debugging && echo "Executing application file upload API command: '$UPLOAD_APP_FILE_CMD'"
+  echo "Verifying uploaded file: '$FILE_NAME'"
+  eval "$UPLOAD_APP_FILE_CMD" | tee $CMD_FILE_OUT
+  APP_FILE_PATH=$(cat $CMD_FILE_OUT |\
+                  jq '.files[]' |\
+                  grep $FILE_NAME |\
+                  xargs echo)
+  [ "$APP_FILE_PATH" == "" ] &&\
+    echo "File '$FILE_NAME' was not uploaded successfully" &&\
+    return 1
+  echo "File 'FILE_NAME' uploaded successfully"
+  return 0
+}
+
+setup_app_group() {
+  APP_GROUP_NAME=${APP_NAME}
+  # Create a group for this application
+  APP_GROUP_CMD="curl\
+                 -s\
+                 -H \"Authorization: $FGAPI_TOKEN\"\
+                 -X GET http://$FGAPI_IP/v1.0/groups/$APP_GROUP_NAME|\
+                 jq '.name' | xargs echo"
+  debugging && echo "Retrieving group name from application API command: '${APP_GROUP_CMD}'"
+  eval $APP_GROUP_CMD | tee $CMD_FILE_OUT
+  APP_GROUP_NAME=$(cat $CMD_FILE_OUT | jq '.name' | xargs echo)
+  [ "$APP_NAME" = "$APP_GROUP_NAME" ] &&\
+    echo "Group having application name already exists" &&\
+    APP_GROUP_ID=$(cat $CMD_FILE_OUT | jq '.id' | xargs echo) &&\
+    return 0
+  APP_GROUP_NAME=${APP_NAME}
+  echo "Group $APP_GROUP_NAME not yet exists, creating it"
+  APP_GROUP_CMD="curl\
+                 -s\
+                 -H \"Content-type: application/json\"\
+                 -H \"Authorization: $FGAPI_TOKEN\"\
+                 -d '{ \"name\": \"$APP_GROUP_NAME\" }'\
+                 -X POST\
+                 http://$FGAPI_IP/v1.0/groups"
+  debugging && echo "Creating group with API command: '$APP_GROUP_CMD'"
+  eval "$APP_GROUP_CMD" | tee $CMD_FILE_OUT
+  APP_GROUP_ID=$(cat $CMD_FILE_OUT | jq '.id' | xargs echo)
+  [ "$APP_GROUP_ID" != "" ] &&\
+    return 0 ||\
+  return 1
+}
+
+setup_group_app() {
+  # Associate the created app to the group
+  GROUP_APPS_CMD="curl\
+                  -s\
+                  -H \"Content-type: application/json\"\
+                  -H \"Authorization: $FGAPI_TOKEN\"\
+                  -X GET http://$FGAPI_IP/v1.0/groups/${APP_NAME}/apps|\
+                  jq '.applications[] | select(.name=\"$APP_GROUP_NAME\") | .id'"
+  debugging && echo "Retrieving application id from group name: '${APP_GROUP_NAME}' withi API: '$GROUP_APPS_CMD'"
+  eval $GROUP_APPS_CMD | tee $CMD_FILE_OUT
+  GROUP_APP_ID=$(cat $CMD_FILE_OUT)
+  [ "$GROUP_APP_ID" != "" ] &&\
+    echo "Group $APP_GROUP_NAME has already application $APP_NAME with id $GROUP_APP_ID" &&\
+    return 0
+  echo "Group $APP_GROUP_NAME does not have application $APP_NAME, registering it"
+  GROUP_APPS_CMD="curl\
+                 -s\
+                 -H \"Content-type: application/json\"\
+                 -H \"Authorization: $FGAPI_TOKEN\"\
+                 -X POST -d '{ \"applications\": [ $APP_ID ]}'\
+                 http://$FGAPI_IP/v1.0/groups/${APP_NAME}/apps"
+  eval "$GROUP_APPS_CMD" | tee $CMD_FILE_OUT
+  GROUP_APP_ID=$(cat $CMD_FILE_OUT| jq '.applications[0]')
+  [ "$GROUP_APP_ID" != "" ] &&\
+    return 0 ||\
+    return 1
+}
+
+install_fg_app() {
+  echo "$SHDESC" &&\
+  find_fgapiserver &&\
+  install_infrastructure &&\
+  install_application &&\
+  upload_file 'pilot_script.sh' &&\
+  upload_file 'docker-compose.yaml_template' &&\
+  setup_app_group &&\
+  setup_group_app &&\
+  return 0 
+}
+
+# Installation step main script
+# It must have the same name of the file
+install_fg_app

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+SHDESC="Setup docker user"
+DESC="The chipster application needs to execute via SSH on a given account ($DOCKER_USER)"
+
+create_docker_user() {
+  USER_EXIST=$(cat /etc/passwd | grep $DOCKER_USER | wc -l)
+  [ $USER_EXIST -ne 0 ] &&  echo "Docker user already exists" && return 0
+  echo "Creating user: $DOCKER_USER" &&\
+  sudo adduser --disabled-password --gecos "" $DOCKER_USER &&\
+  echo "Executing ssh-keygen" &&\
+  sudo su - $DOCKER_USER -c "ssh-keygen -f id_rsa -t rsa -N ''" &&\
+  echo "Enable passwordless sudo for docker command" &&\
+  sudo su - -c "echo \"$DOCKER_USER ALL=(ALL) NOPASSWD: \"\$(which docker) >> /etc/sudoers" &&\
+  sudo su - -c "echo \"$DOCKER_USER ALL=(ALL) NOPASSWD: \"\$(which netstat) >> /etc/sudoers" &&\
+  echo "Setup password for user $DOCKER_USER" &&\
+  echo -e "$DOCKER_USER_PASS\n$DOCKER_USER_PASS\n" | sudo passwd $DOCKER_USER &&\
+  sudo usermod -a -G docker $USER &&\
+  RES=$? &&\
+  return $RES
+}
+
+setup_docker_user_in_apiserverdaemon() {
+  ASD_CONTAINER=$(docker ps | grep apiserverdaemon | awk '{ print $1 }')
+  [ "$ASD_CONTAINER" = "" ] && echo "It seems no docker container exists for apiserverdaemon component" && return 1
+  echo "APIServerDaemon container id: $ASD_CONTAINER" &&\
+  HOST_NAME=$(hostname) &&\
+  HOST_REG=$(docker exec $ASD_CONTAINER\
+               /bin/bash -c "cat /etc/ssh/ssh_config | grep $HOST_NAME | wc -l")
+  [ "$HOST_REG" -ne 0 ] && echo "Host already registered in apiserverdaemon" && return 0
+  echo "Registering host $HOST_NAME in apiserverdaemon" &&\
+  docker exec $ASD_CONTAINER\
+    /bin/bash -c "echo \"Host $HOST_NAME\">>/etc/ssh/ssh_config &&\
+                  echo \"    StrictHostKeyChecking no\">>/etc/ssh/ssh_config &&\
+                  echo \"    UserKnownHostsFile=/dev/null\">>/etc/ssh/ssh_config" &&\
+  RES=$? &&\
+  return $RES
+}
+
+setup_docker_user() {
+  echo "$SHDESC" &&\
+  create_docker_user &&\
+  setup_docker_user_in_apiserverdaemon &&\
+  return $RES
+}
+
+# Installation step main script
+# It must have the same name of the file
+setup_docker_user

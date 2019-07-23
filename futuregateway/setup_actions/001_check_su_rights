@@ -1,0 +1,13 @@
+#!/bin/bash
+
+SHDESC="Check for su rights"
+DESC="This script needs su rights"
+
+check_su_rights() {
+  SETUP_UID=$(id -u)
+  [ $SETUP_UID -eq 0 ] && RES=0 || RES=1
+  return $RES
+}
+
+echo "$SHDESC" &&\
+check_su_rights
