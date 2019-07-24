@@ -17,7 +17,7 @@ OAR=https://www.openaccessrepository.org
 instantiate_compose_template() {
   HTTPD_PORT=$1
   FTP_USER=$CUSER
-  [ "$PORT" = "" ] &&\
+  [ "$2" = "" ] &&\
     FTP_PASS=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1) ||\
     FTP_PASS=$2
   cp docker-compose.yaml_template docker-compose.yaml
@@ -33,7 +33,6 @@ instantiate_compose_template() {
 #    <user> The user to associate the allocated HTTP for output
 #    <model_http_url> HTTP based URL of the model file
 #    <params_http_url> HTTP based URL of the parameters file
-#    [port] The HTTP port number associated to the user
 #
 execute_PALMS() {
 
@@ -55,7 +54,12 @@ execute_PALMS() {
     ERR_MSG="No params URL file given" &&\
     return 1
 
-  PORT=$4
+  # Automatically determine if the given user has an active HTTP/FTP port assigned
+  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  [ "$HTTPDFTP_CNT" != "" ] &&\
+    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
+    PORT=""
+
   if [ "$PORT" = "" ]; then
     # This script uses container_manager scripts to allocate containers
     # and retrieve a given port
@@ -67,12 +71,14 @@ execute_PALMS() {
     [ $HTTP_OUT_PORT -le 0 ] &&\
       ERR_MSG="Unable to find a suitable port for PALMS execution" &&\
       return 1
+    FTP_PASS=""
   else
     HTTP_OUT_PORT=$PORT
+    FTP_PASS=$(docker exec $HTTPDFTP_CNT env | grep UDnWQOFx | awk -F'|' '{ print $2 }')
   fi
 
   # Customize template file to generate instance docker-compse.yaml file
-  instantiate_compose_template $HTTP_OUT_PORT "$5"
+  instantiate_compose_template $HTTP_OUT_PORT $FTP_PASS 
 
   # Start the REPAST PALMS execution
   export HTTP_OUT_PORT
@@ -101,7 +107,8 @@ execute_PALMS() {
     REPAST_OUT="$PARAMS_NAME.tar" &&\
     cp output.tar $REPAST_OUT &&\
     FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT} &&\
-    docker cp $REPAST_OUT $HTTPD_CNT:/ftp/$CUSER/$REPAST_OUT
+    docker cp $REPAST_OUT $HTTPD_CNT:/ftp/$CUSER/$REPAST_OUT &&\
+    rm -f $REPAST_OUT
 
   # Prepare successful execution output
   cat >$JSON_OUT <<EOF
@@ -129,14 +136,11 @@ EOF
 #    <user> The user to associate the allocated HTTP for output
 #    <model_DOI> DOI number of the model file
 #    <params_DOU> DOI number of the parameters file
-#    [port] The HTTP port number associated to the user
 #
 execute_DOIPALMS() {
   CUSER=$1
   MODEL_DOI=$2
   PARAMS_DOI=$3
-  PORT=$4
-  FTPPASS=$5
   MODEL_URL=$(curl -sL $DOI/$MODEL_DOI |\
             grep model.tar |\
             grep "href=\"http" |\
@@ -152,7 +156,7 @@ execute_DOIPALMS() {
   echo "model: $MODEL_URL - params: $PARAMS_URL" 
   [ "$MODEL_URL" != "" -a\
     "$PARAMS_URL" != "" ] &&\
-    execute_PALMS $CUSER $MODEL_URL $PARAMS_URL $PORT $FTPPASS &&\
+    execute_PALMS $CUSER $MODEL_URL $PARAMS_URL &&\
     return 0
   ERR_MSG="Unable to execute DOI based PALMS execution, model and/or parameters files not available"
   return 1
@@ -189,7 +193,7 @@ EOF
 #
 # Arguments:
 #    <user>: Username associated to the HTTPD server
-#    <port>: HTTPD port number of the HTTPD server
+#
 list_PALMS() {
 
   CUSER=$1
@@ -197,9 +201,14 @@ list_PALMS() {
     ERR_MSG="No username specified" &&\
     return 1
   
-  PORT=$2
+  # Automatically determine if the given user has an active HTTP/FTP port assigned
+  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  [ "$HTTPDFTP_CNT" != "" ] &&\
+    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
+    PORT=""
+
   [ "$PORT" = "" ] &&\
-    ERR_MSG="No port specified" &&\
+    ERR_MSG="No port exists for user $CUSER" &&\
     return 1
   
   # Retrieve file list
@@ -207,7 +216,18 @@ list_PALMS() {
   i=0
   printf "{\"files\": ["
   for f in $FILES_LIST; do
-	  FILE_URL=$(curl -s http://$HOST:$PORT/$CUSER/ | grep href | grep '.tar' | grep $f | awk -F'=' '{ print $2 }'| awk -F'<' '{ print $1 }' | awk -F'>' -v host=$HOST -v port=$PORT -v user=$CUSER '{ printf("http://%s:%s/%s/%s", host, port, user, $2) }' | xargs -I{} echo "{}"|xargs echo)
+	  FILE_URL=$(curl -s http://$HOST:$PORT/$CUSER/ |\
+                     grep href |\
+                     grep '.tar' |\
+                     grep $f |\
+                     awk -F'=' '{ print $2 }' |\
+                     awk -F'<' '{ print $1 }' |\
+                     awk -F'>' -v host=$HOST\
+                               -v port=$PORT\
+                               -v user=$CUSER\
+                              '{ printf("http://%s:%s/%s/%s", host, port, user, $2) }' |\
+                     xargs -I{} echo "{}"|\
+		     xargs echo)
     [ $i -eq 0 ] &&\
       SEP="" ||\
       SEP=", "
@@ -222,7 +242,8 @@ list_PALMS() {
 # Arguments:
 #    <user>: Username associated to the HTTPD server
 #    <port>: HTTPD port number of the HTTPD server
-#    [files]: List of files to remove 
+#    [files]: List of files to remove
+#
 clear_PALMS() {
 
   CUSER=$1
@@ -287,10 +308,23 @@ EOF
 #   The script returns as output a json containing information to retrieve and
 #   eventually release the allocate resource.
 #
-# - release <HTTP_PORT>
+# - doi-submit <user> <model_DOI> <params_DOI>
 #
-#   In this case the allocated resource will be released, since this operation
-#   any output generated by this resource will be no longer available.
+#   As above, but model and parameter files are extracted from given DOIs
+#
+# - release <user>
+#
+#   In this case the allocated HTTP/FTP resource will be released, since this 
+#   operation any output generated by this resource will be no longer available.
+#
+# - list <user>
+#
+#   Show files in allocated HTTP/FTP resource
+#
+# - clear <user> [files]
+#
+#   Remove files in allocate HTTP/FTP resource if no file list is given, all
+#   files will be removed
 #
 
 # Error message variable
