@@ -35,6 +35,20 @@ This command list available files in the FTP/HTTPD server
 
 This command releases the HTTP/FTP server assigned to the given user. Once performed this operation, it will be not possible to get stored output files anymore.
 
+* To delete or clear the HTTP/FTP content
+```baah
+./pilot_script.sh clear <user_name> [<file_1> <file_2> ...]
+```
+
+This command removes specified file names, if no files are given the whole FTP files will be removed
+
+* To upload a file in the HTTP/FTP server
+```bash
+./pilot_scipt.sh upload <user_name> <file_1> [<file_2> ...]
+```
+
+This command offers the possibility to upload a given file in the user FTP/HTTPD, so that it will be possible to execute REPAST PALMS using custom models and/or parameters files.
+
 ## Execution example
 Below an example of the `submit` execution:
 

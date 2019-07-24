@@ -241,7 +241,6 @@ list_PALMS() {
 #
 # Arguments:
 #    <user>: Username associated to the HTTPD server
-#    <port>: HTTPD port number of the HTTPD server
 #    [files]: List of files to remove
 #
 clear_PALMS() {
@@ -251,18 +250,18 @@ clear_PALMS() {
     ERR_MSG="No username specified" &&\
     return 1
 
-  PORT=$2
+  # Automatically determine if the given user has an active HTTP/FTP port assigned
+  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  [ "$HTTPDFTP_CNT" != "" ] &&\
+    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
+    PORT=""
+
   [ "$PORT" = "" ] &&\
-    ERR_MSG="No port specified" &&\
+    ERR_MSG="No port exists for user $CUSER" &&\
     return 1
-
-  FILES=$3
-
-  HTTPD_CNT=$(docker ps -a | grep osct/ftpd | grep $PORT | awk '{ print $1 }')
-
-  [ "$HTTPD_CNT" = "" ] &&\
-    ERR_MSG="Unable to identify container Id running ftpd on port: $PORT" &&\
-    return 1
+      
+  shift 2
+  FILES=$@
 
   RMFILES=$(docker exec $HTTPD_CNT /bin/ls -1 /ftp/$CUSER)
   RMFILES_LIST=""
@@ -291,6 +290,53 @@ clear_PALMS() {
  "user": "${CUSER}",
  "container": "${HTTPD_CNT}",
  "message": "${RMMSG}"
+}
+EOF
+}
+
+# Upload a given list of files into the HTTPD/FTP server
+#
+# Arguments:
+#    <user>: Username associated to the HTTPD server
+#    <file_1>: File to upload
+#    [<file_n>]: Other files
+#
+upload_PALMS() {
+
+  CUSER=$1
+  [ "$CUSER" = "" ] &&\
+    ERR_MSG="No username specified" &&\
+    return 1
+
+  # Automatically determine if the given user has an active HTTP/FTP port assigned
+  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  [ "$HTTPDFTP_CNT" != "" ] &&\
+    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
+    PORT=""
+
+  [ "$PORT" = "" ] &&\
+    ERR_MSG="No port exists for user $CUSER" &&\
+    return 1
+        
+  shift 1
+  FILES=$@
+
+  UPFILES_LIST=""
+  for f in $FILES; do
+    docker cp $f $HTTPDFTP_CNT:/ftp/$CUSER/$f &&\
+    [ -z $UPFILES_LIST ] &&\
+          UPFILES_LIST=$f ||\
+          UPFILES_LIST="$UPFILES_LIST, $f"
+  done
+
+  [ -z $UPFILES_LIST ] &&
+    UPMSG="No files removed" ||\
+    UPMSG="Uploaded files: $UPFILES_LIST for user $CUSER have been uploaded successfully"
+  cat >$JSON_OUT <<EOF
+{
+ "user": "${CUSER}",
+ "container": "${HTTPDFTP_CNT}",
+ "message": "${UPMSG}"
 }
 EOF
 }
@@ -325,6 +371,10 @@ EOF
 #
 #   Remove files in allocate HTTP/FTP resource if no file list is given, all
 #   files will be removed
+#
+# - upload <user> <file_1> [<file_2> ...]
+#
+#   Upload a given list of files in the FTP server
 #
 
 # Error message variable
@@ -364,6 +414,11 @@ case $CMD in
   # Clear all files in ftp server
   "clear")
     clear_PALMS ${@:2}
+    ;;
+
+  # Upload a given list of files in ftp server
+  "upload")
+    upload_PALMS ${@:2}
     ;;
 
   # Notify unknown/unsupported commands
