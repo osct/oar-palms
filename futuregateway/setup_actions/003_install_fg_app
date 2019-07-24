@@ -170,10 +170,10 @@ upload_file() {
                      -H \"Content-Type: application/json\"\
                      http://$FGAPI_IP/v1.0/applications/$APP_ID/input |\
                      jq '.[]' |\
-                     jq '.name + " " + .path' |\
-                     xargs -I{} printf "{}\n" |\
+                     jq '.name + \" \" + .path' |\
+                     xargs -I{} printf \"{}\\n\" |\
                      grep pilot_script.sh |\
-                     awk '{ print $2 }'"
+                     awk '{ print \$2 }'"
   debugging && echo "Retrieving path of '$FILE_NAME' file with API command: '$APP_FILE_PATH_CMD'"
   eval "$APP_FILE_PATH_CMD" | tee $CMD_FILE_OUT
   APP_FILE_PATH=$(cat $CMD_FILE_OUT)
@@ -199,7 +199,7 @@ upload_file() {
   [ "$APP_FILE_PATH" == "" ] &&\
     echo "File '$FILE_NAME' was not uploaded successfully" &&\
     return 1
-  echo "File 'FILE_NAME' uploaded successfully"
+  echo "File '$FILE_NAME' uploaded successfully"
   return 0
 }
 

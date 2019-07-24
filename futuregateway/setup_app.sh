@@ -15,7 +15,7 @@ SETUP_ACTIONS_DIR=setup_actions # Folder containing setup actions
 SETUP_APP_LOG=setup_app.log
 # Token used for fgAPIServer APIs
 # Token parameter has to include 'Bearer' in case of PTV tokens
-FGAPI_TOKEN="2a7a24e5-34f4-11e9-a989-0242ac120002"
+FGAPI_TOKEN="d72b13f2-adfe-11e9-a048-0242ac120002"
 APP_NAME=oar-palms
 APP_INFRA_NAME=$DOCKER_USER@fgsg.ct.infn.it
 APP_INFRA_DESC="$DOCKER_USER@$DOCKER_USER_HOST, used to run docker containers"
