@@ -88,7 +88,15 @@ execute_PALMS() {
                                           $FTP_PASS\
                                           ftp://ftpd_$CUSER/\
                                           "$REPAST_MODEL"\
-                                          "$REPAST_PARAMS" 
+                                          "$REPAST_PARAMS" > docker.out 2>docker.err
+  # Store container execution into the error file
+  echo "Docker run (begin)" >&2
+  echo "[output]" >&2
+  cat docker.out >&2
+  echo "[error]" >&2
+  cat docker.err >&2
+  echo "Docker run (end)" >&2
+  rm -f docker.out docker.err
   # Build output file name
   REPAST_OUT=out_$(basename $REPAST_PARAMS).tar
   
@@ -99,7 +107,7 @@ execute_PALMS() {
   FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT}
 
   # To recover ouptut files use:
-  curl $FILE_URL > output.tar
+  curl -s $FILE_URL > output.tar
 
   # In case of DOIs, output file may have a different name
   [ "$PARAMS_NAME" != "" ] &&\
@@ -124,7 +132,7 @@ execute_PALMS() {
    "ftp_user": "${CUSER}",
    "ftp_pass": "${FTP_PASS}",
    "file_name": "${REPAST_OUT}",
-   "url": "${FILE_URL}"}
+   "url": "${FILE_URL}"}${DOI_OUTPUT}
 }
 EOF
 }
@@ -153,9 +161,9 @@ execute_DOIPALMS() {
               grep "<h1>" |\
               awk -F'>' '{ print $2}' |\
               awk -F'<' '{ print tolower($1) }')
-  echo "model: $MODEL_URL - params: $PARAMS_URL" 
   [ "$MODEL_URL" != "" -a\
     "$PARAMS_URL" != "" ] &&\
+    DOI_OUTPUT=$(printf ",\n \"doi\": {\n   \"model\": \"$MODEL_DOI\",\n   \"parameters\": \"$PARAMS_DOI\" }")
     execute_PALMS $CUSER $MODEL_URL $PARAMS_URL &&\
     return 0
   ERR_MSG="Unable to execute DOI based PALMS execution, model and/or parameters files not available"
@@ -397,7 +405,8 @@ case $CMD in
     ;; 
 
   # Process 'submit' command
-  "submit") 
+  "submit")
+    DOI_OUTPUT=""
     execute_PALMS ${@:2}
     ;;
 
