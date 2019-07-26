@@ -1,0 +1,5 @@
+Bundle-Name: liferay7-oar-palms
+Bundle-SymbolicName: liferay7.oar.palms
+Bundle-Version: 1.0.0
+Export-Package: liferay7.oar.palms.constants
+Web-ContextPath: /liferay7-oar-palms
