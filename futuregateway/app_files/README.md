@@ -5,21 +5,15 @@ The script accepts different input parameters accordingly to the action to be pe
 
 * Execution of REPAST PALMS using HTTP URLs for parameter and model files:
 ```
-./pilot_script.sh submit <user_name> <parameter_http_url> <model_http_url> 
+./pilot_script.sh submit <user_name> <model_http_url|model_DOI> <parameter_http_url|parameter_DOI> 
 ```
 
 The script determines automatically if the given `<user_name>` has allocated an HTTPD/FTP server; if not, a new dedicated server will be instantiated.
 The allocated HTTP/FTP server will be kept alive till a `release` command will be executed.
-The HTTP/FTP server has a twofold scope, the FTP server is used to store computed files by REAPST PALMS executions. The HTTP server publishes these files giving the opportunity to download produced output files using http URLs.
-
-* Execution of REPAST PALMS using DOIs as reference for parameter and model files:
-```
-./pilot_script.sh doi-submit <user_name> <parameter_DOI> <model_DOI> 
-```
-
-This command line operates exactly like the above command, the only difference is that DOIs endpoints will be first translated via HTTP accessible URLs.
+The HTTP/FTP server has a twofold scope, the FTP server is used to store computed files by REAPST PALMS executions. The HTTP server publishes these files giving the opportunity to download produced output files using http URLs. It is possible to use the `upload` command to send custom model or parameters file for further executions.
+The `submit` command accepts both http URL or OAR DOI references as input. In case of DOIs, the endpoints will be first translated via HTTP accessible URLs.
 DOI are translated using the Open Access Repository (OAR) available at: www.openaccessrepository.it.
-The OAR server is configurable inside the `pilot_script.sh` code, by the variable `OAR` however it is necessary to verify that existing instructions to extract HTTP URLs from the given DOI number to the corresponding HTTP URL are still working correctly after changing the OAR server.
+The OAR server is configurable inside the `pilot_script.sh` code, by the variable `OAR` however it is necessary to verify that existing instructions to extract HTTP URLs from the given DOI number to the corresponding HTTP URL are still working correctly after changing the OAR server. To check the translation instructions see the function doi2url.
 
 * To list files associated to the allocated resource
 ```

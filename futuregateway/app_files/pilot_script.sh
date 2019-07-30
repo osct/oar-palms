@@ -27,6 +27,41 @@ instantiate_compose_template() {
   sed -i s/"<USER>"/$CUSER/g docker-compose.yaml
 }
 
+# Tranlsate a given DOI number into its referenced URL address
+#
+# Arguments:
+#    <DOI number> DOI number, if altrady an URL it will be ignored
+#    <DOI type> DOI type tells if it is a parameter or a model DOI
+doi2url() {
+  INPDOI=$1
+  DOITYPE=$2
+  ISURL=$(echo $INPDOI | sed 's/^http.*/URL/')
+  # Skip URLs
+  [ "$ISURL" == "URL" ] &&\
+    return 0
+  # Model or Parameters case
+  if [ "$DOITYPE" = "model" ]; then
+    DOI_MODEL=$INPDOI
+    REPAST_MODEL=$(curl -sL $DOI/$INPDOI |\
+                   grep model.tar |\
+                   grep "href=\"http" |\
+                   awk -F'"' '{ print $6 }')
+  elif [ "$DOITYPE" = "parameters" ]; then
+    DOI_PARAMETERS=$INPDOI
+    REPAST_PARAMS=$(curl -sL $DOI/$INPDOI |\
+                    grep xml |\
+                    grep "href=\"http" |\
+                    awk -F'"' '{ print $6 }')
+    PARAMS_NAME=$(curl -sL $DOI/$INPDOI |\
+                  grep "<h1>" |\
+                  awk -F'>' '{ print $2}' |\
+                  awk -F'<' '{ print tolower($1) }')
+  else
+    echo "Unknown DOI type argument: '"$DOITYPE"'" >&2
+  fi
+  DOI_OUTPUT=$(printf ",\n \"doi\": {\n   \"model\": \"$DOI_MODEL\",\n   \"parameters\": \"$DOI_PARAMETERS\" }")
+}
+
 # Execute a given PALMS execution
 #
 # Arguments:
@@ -47,12 +82,14 @@ execute_PALMS() {
   [ "$REPAST_MODEL" = "" ] &&\
     ERR_MSG="No model URL file given" &&\
     return 1
+  doi2url $REPAST_MODEL "model"
   
   REPAST_PARAMS=$3
   PARAMS_CHECK=0
   [ "$REPAST_PARAMS" = "" ] &&\
     ERR_MSG="No params URL file given" &&\
     return 1
+  doi2url $REPAST_PARAMS "parameters"
 
   # Automatically determine if the given user has an active HTTP/FTP port assigned
   HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
@@ -118,7 +155,6 @@ execute_PALMS() {
     docker cp $REPAST_OUT $HTTPD_CNT:/ftp/$CUSER/$REPAST_OUT &&\
     rm -f $REPAST_OUT
 
-  # Prepare successful execution output
   cat >$JSON_OUT <<EOF
 {
  "user": "${CUSER}",
@@ -135,39 +171,6 @@ execute_PALMS() {
    "url": "${FILE_URL}"}${DOI_OUTPUT}
 }
 EOF
-}
-
-# Execute a given PALMS execution starting from DOI numbers as model
-# and parameters files
-# Arguments:
-#
-#    <user> The user to associate the allocated HTTP for output
-#    <model_DOI> DOI number of the model file
-#    <params_DOU> DOI number of the parameters file
-#
-execute_DOIPALMS() {
-  CUSER=$1
-  MODEL_DOI=$2
-  PARAMS_DOI=$3
-  MODEL_URL=$(curl -sL $DOI/$MODEL_DOI |\
-            grep model.tar |\
-            grep "href=\"http" |\
-            awk -F'"' '{ print $6 }')
-  PARAMS_URL=$(curl -sL $DOI/$PARAMS_DOI |\
-             grep xml |\
-             grep "href=\"http" |\
-             awk -F'"' '{ print $6 }')
-  PARAMS_NAME=$(curl -sL $DOI/$PARAMS_DOI |\
-              grep "<h1>" |\
-              awk -F'>' '{ print $2}' |\
-              awk -F'<' '{ print tolower($1) }')
-  [ "$MODEL_URL" != "" -a\
-    "$PARAMS_URL" != "" ] &&\
-    DOI_OUTPUT=$(printf ",\n \"doi\": {\n   \"model\": \"$MODEL_DOI\",\n   \"parameters\": \"$PARAMS_DOI\" }")
-    execute_PALMS $CUSER $MODEL_URL $PARAMS_URL &&\
-    return 0
-  ERR_MSG="Unable to execute DOI based PALMS execution, model and/or parameters files not available"
-  return 1
 }
 
 # Release resouces assigned to the user owning given HTTPD port number
@@ -354,17 +357,14 @@ EOF
 #
 # This script takes as arguments the following values:
 #
-# - submit <user> <model_http_url> <params_http_url>
+# - submit <user> <model_http_url|model_DOI> <params_http_url|params_DOI>
 #
 #   In this case a new PALMS environment will be allocated for the given 
 #   user if it does not exists yet and the given couple (model, params) will
-#   be executed. The output will be available through the HTTP server.
+#   be executed. The output will be available through a HTTP server.
 #   The script returns as output a json containing information to retrieve and
-#   eventually release the allocate resource.
-#
-# - doi-submit <user> <model_DOI> <params_DOI>
-#
-#   As above, but model and parameter files are extracted from given DOIs
+#   eventually release the allocated resource.
+#   Submit command may accept http url or OAR DOI numbers.
 #
 # - release <user>
 #
@@ -399,10 +399,6 @@ CMD=$1
 
 # Process given command
 case $CMD in
-  # Process 'doi-submit' command
-  "doi-submit")
-    execute_DOIPALMS ${@:2}
-    ;; 
 
   # Process 'submit' command
   "submit")
