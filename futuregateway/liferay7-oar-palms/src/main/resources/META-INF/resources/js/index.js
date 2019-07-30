@@ -343,20 +343,20 @@ function exec_application() {
 //         "    <table id=\"task_table_title\">" +
 //         "    <tr><td>" +
 //         "        <button id=\"refresh_tasks\">" +
-// 	"        <span class=\"glyphicon glyphicon glyphicon-refresh\" aria-hidden=\"true\"></span>" +
-// 	"        </button></td>" +
-// 	"        <td><h4>Executions</h4></td></tr>" +
+//  "        <span class=\"glyphicon glyphicon glyphicon-refresh\" aria-hidden=\"true\"></span>" +
+//  "        </button></td>" +
+//  "        <td><h4>Executions</h4></td></tr>" +
 //         "    </table>" +
 //         "    <table id=\"task_table\" class=\"table\"></table>");
 //       $("#refresh_tasks").on("click",refresh_tasks);
 //       $('#task_table').append(
 //         "<tr>" + 
-// 	"<th>Action</th>" + 
-// 	"<th>Date</th>" +
-// 	"<th>Status</th>" +
-// 	"<th>Model</th>" +
-// 	"<th>Parameters</th>" +
-// 	"</tr>");
+//  "<th>Action</th>" + 
+//  "<th>Date</th>" +
+//  "<th>Status</th>" +
+//  "<th>Model</th>" +
+//  "<th>Parameters</th>" +
+//  "</tr>");
 //       $('#task_table').append(table_rows);
 //       // Assign right function call to generated refresh buttons
 //       for(var i=0; i<task_data.length; i++) {
@@ -371,14 +371,35 @@ function exec_application() {
 //     }
 // }
 
+// Set spinning button if argument is true otherwise set the normal button
+// This function also enable/disable the submit button
+var set_spin_button = function(spinning) {
+  var normal_solve_btn = "<button id=\"btn_solve_doi\" class=\"btn btn-primary\" type=\"button\">Prepare</button>";
+  var spinning_solve_btn = "<button id=\"btn_solve_doi\" class=\"btn btn-primary\" type=\"button\" disabled>" +
+                           "<span class=\"spinner-border spinner-border-sm\" role=\"status\" aria-hidden=\"true\"></span>" +
+                           "Solving ...</button>";
+  $('.doi_spin_button').empty();
+  if(spinning) {
+    $('.doi_spin_button').append(spinning_solve_btn);
+    $('#btn_execute').prop('disabled', true);
+  } else {
+    $('.doi_spin_button').append(normal_solve_btn);
+    $('#btn_execute').prop('disabled', false);
+  }
+}
+
+
 // Resolve an output DOI registered in OAR extracting model and parameter file DOIs
 var solve_output_doi = function() {
+  set_spin_button(true);
   var output_doi = $('#output_doi_input').val();
   DOI_Output.reset();
   DOI_Output.model_input = 'palms_model';
   DOI_Output.params_input = 'palms_parameters';
   DOI_Output.doi_extract(output_doi);
 }
+
+
 
 // Function that builds the GUI accordingly to the application
 // logic status
@@ -402,7 +423,8 @@ var build_gui = function() {
     "    <small id=\"help_mod\" class=\"form-text text-muted\">Place Ouptut DOI reference (10.15161/oar.it/23504)</small>" +
     "  </div>" +
     "</form>" +
-    "<button id=\"btn_solve_doi\" class=\"btn btn-primary\">Prepare</button>";
+    "<div class=\"doi_spin_button\" id=\"doi_spin_button\">" +
+    "</div>";
   var exec_palms_gui =
     "<h4>PALMS Execution</h4>" +
     "<form>" +
@@ -433,6 +455,7 @@ var build_gui = function() {
     $('.gui').append(
       "<div id=\"output_doi\">" + output_doi_gui + "</div>" +
       "<div id=\"exec_palms\">" + exec_palms_gui + "</div>");
+    set_spin_button(false);
     $("#btn_solve_doi").on("click", solve_output_doi);
     $("#btn_execute").on("click", refresh_page);
   }
@@ -777,44 +800,83 @@ DOI_Output = {
     this.model_input = '';
     this.params_input = '';
   },
-  doi_extract(doi_number) {
+  doi_extract: function(doi_number) {
     this.doi_number = doi_number;
     this.doi_url = this.doi_pxcors + this.doi_server + this.doi_number;
     console.log('Output DOI URL: \'' + this.doi_url + '\'');
-    $.get(this.doi_url, function(data) {
-      console.log('data: ' + data);
-      var doi_page_doc =(new DOMParser).parseFromString('' + data, "text/html").documentElement;
-      doi_list = $(doi_page_doc).find('a[href^="' + DOI_Output.doi_server + '"]');
-      console.log('len: ' + doi_list.length);
-      for(var i=0; i<doi_list.length-1; i++) {
-        var doi_link = doi_list[i].href;
-        console.log('Referenced DOI: ' + doi_link);
-        // Skip the reproducibility DOI
-        if(doi_link.includes('23494')) {
-          console.log('DOI: ' + doi_link + ' refers to the reproducibility code');
-          continue;
+    $.ajax({
+        timeout: 30000,
+        url: this.doi_url,
+        type: 'GET',
+        dataType: 'text',
+        success: function(data){
+          DOI_Output.parse_output_doi(data);
+        },
+        error: function (jqXHR, textStatus, errorThrown) {
+          DOI_Output.report_error(
+            "Unable to load output content from page: '" + this.doi_url + "'' " +
+            "referred by DOI: '" + this.doi_number + "'"
+          )
         }
-        var doi_url = DOI_Output.doi_pxcors + doi_link;
-        console.log('doi_url: ' + doi_url);
-        // Check DOI content (check if model or parameter)
-        $.get(doi_url, function(data) {
-          var doi_page_doc =(new DOMParser).parseFromString('' + data, "text/html").documentElement;
-          if($(doi_page_doc).find('title')[0].text.includes('model')) {
-            DOI_Output.doi_model = $(doi_page_doc).find('img[data-toggle]')[0].alt;
-            if(DOI_Output.model_input != '') {
-              $('#' + DOI_Output.model_input).val(DOI_Output.doi_model);
-            }
-            console.log('Model DOI: ' + DOI_Output.doi_model);
-          } else {
-            DOI_Output.doi_parameters = $(doi_page_doc).find('img[data-toggle]')[0].alt;
-            if(DOI_Output.params_input != '') {
-              $('#' + DOI_Output.params_input).val(DOI_Output.doi_parameters);
-            }
-            console.log('Parameters DOI: ' + DOI_Output.doi_parameters);
-          }
-        });
-      } 
     });
+  },
+  parse_output_doi: function(data) {
+    console.log('data: ' + data);
+    var doi_page_doc =(new DOMParser).parseFromString('' + data, "text/html").documentElement;
+    doi_list = $(doi_page_doc).find('a[href^="' + this.doi_server + '"]');
+    console.log('len: ' + doi_list.length);
+    for(var i=0; i<doi_list.length-1; i++) {
+      var doi_link = doi_list[i].href;
+      console.log('Referenced DOI: ' + doi_link);
+      // Skip the reproducibility DOI
+      if(doi_link.includes('23494')) {
+        console.log('DOI: ' + doi_link + ' refers to the reproducibility code');
+        continue;
+      }
+      var doi_url = this.doi_pxcors + doi_link;
+      console.log('doi_url: ' + doi_url);
+      $.ajax({
+        timeout: 30000,
+        url: doi_url,
+        type: 'GET',
+        dataType: 'text',
+        success: function(data){
+          DOI_Output.parse_doi_content(data);
+        },
+        error: function (jqXHR, textStatus, errorThrown) {
+          DOI_Output.report_error(
+            "Unable to get page content from: '" + doi_url + "' "+
+            "referred by DOI: '" + this.doi_number + "'");
+        }
+      });
+    }
+  },
+  parse_doi_content: function(data) {
+    var doi_page_doc =(new DOMParser).parseFromString('' + data, "text/html").documentElement;
+    if($(doi_page_doc).find('title')[0].text.includes('model')) {
+      this.doi_model = $(doi_page_doc).find('img[data-toggle]')[0].alt;
+      if(this.model_input != '') {
+        $('#' + this.model_input).val(this.doi_model);
+      }
+      console.log('Model DOI: ' + this.doi_model);
+    } else {
+      this.doi_parameters = $(doi_page_doc).find('img[data-toggle]')[0].alt;
+      if(this.params_input != '') {
+        $('#' + this.params_input).val(this.doi_parameters);
+      }
+      console.log('Parameters DOI: ' + this.doi_parameters);
+    }
+    // When both model and parameters are solved, restore spinnig button
+    if($('#' + this.model_input).val() == this.doi_model &&
+       $('#' + this.params_input).val() == this.doi_parameters) {
+      set_spin_button(false);
+    }
+  },
+  report_error: function(message) {
+    // Restore spinning button on error
+    set_spin_button(false);
+    alert(message);
+    console.log('ERROR: ' + message);
   }
 }
 
