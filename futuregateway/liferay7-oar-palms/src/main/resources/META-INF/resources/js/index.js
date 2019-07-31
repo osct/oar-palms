@@ -18,6 +18,16 @@ import $ from 'jquery';
 var application_name = 'oar-palms';
 var application_id = 8;
 
+// Collect global scope variables useful for debugging purposes
+debug_obj = {
+  last_url: '',
+  last_data: '',
+  reset: function() {
+    this.last_url = '';
+    this.last_data = '';
+  }
+};
+
 // This variable keeps information related do the user FTP server
 ftp_server = {
   status: false,
@@ -44,7 +54,7 @@ ftp_server = {
                   this.password.length > 0 &&
                   this.httpd_port > 0 &&
                   this.httpd_name.length > 0 &&
-                  this.httpd_id > 0;
+                  this.httpd_id.length > 0;
     return this.status;
   }
 };
@@ -102,6 +112,7 @@ function build_page() {
     "  <div class=\"task_info\"></div>" +
     "  <div class=\"gui\"></div>" +
     "  <div class=\"ftp\"></div>" +
+    "  <div class=\"task_list\"></div>" +
     "</div>";
   if(themeDisplay.isSignedIn() && fg_user_info.user_group == "true") {
       // init call may report errors to be notified
@@ -170,39 +181,50 @@ function reset_area(area) {
 
 // Success case for do_task 
 var do_task_done = function(data) {
+    debug_obj.last_data = data;
     // Notify success action
     alert("New " + application_name + " task has been successfully created");
-    // Rebuild task table after successful submission
+    // Enable submit button
+    $('#btn_execute').prop('disabled', true);
+    // Update the page
     check_tasks(application_name);
 }
 
 // Error case for do_task 
 var do_task_error = function(jqXHR, exception) {
+    // Notify the submission error
     alert("Error creating new task");
+    // Enable submit button
+    $('#btn_execute').prop('disabled', true);
 }
 
 // Generic task submission call DELETE/SUBMIT
 function do_task(model, parameters) {
     // Execute Submit POST command
-    url = fg_api_settings.base_url + '/' +
-          fg_api_settings.version  +'/tasks';
-    taskData = {
+    var url = fg_api_settings.base_url + '/' +
+              fg_api_settings.version  +'/tasks';
+    debug_obj.last_url = url;
+    task_data = {
         "application": application_id,
-        "description": application_name + " fgsg",
-        "arguments": [model, parameters ],
+        "description": "fgsg - submit '" + model +
+                       "' '" + parameters + "'",
+        "arguments": [ "submit",
+                       "'" + fg_user_info.name + "'",
+                       "'" + model + "'",
+                       "'" + parameters + "'" ],
         //"output_files": [{"name": "repast.json"}],
         "output_files": [],
     };
-    doPost(url, taskData, do_task_done, do_task_error);
+    // Performs the FG Task submitssion
+    doPost(url, task_data, do_task_done, do_task_error);
 }
 
-// Perform application submission
+// Perform PALMS application submission
 function do_submit() {
-    $("#submit_button").prop('disabled','true');
-    model = $("#model").val()
-    parameters = $("#parameters").val()
+    $('#btn_execute').prop('disabled', true);
+    var model = $('#palms_model').val();
+    var parameters = $('#palms_parameters').val();
     do_task(model, parameters);
-    $("#submit_button").removeAttr("disabled");
 }
  
 // Confirm submission action
@@ -214,6 +236,7 @@ function confirm_dialog(message, action) {
     }
 }
 
+// Entrypoint for executing PALMS
 function exec_application() {
    confirm_dialog("Are you sure to submit " + application_name + "?", do_submit); 
 }
@@ -255,24 +278,29 @@ function exec_application() {
 // }
 
 // Success trash_task
-// var trash_task_done = function() {
-//     alert("Task successfully removed");
-//     check_tasks(application_name);
-// }
+var trash_task_done = function() {
+  alert("Task successfully removed");
+  check_tasks(application_name);
+}
 
 // Error trash_task
-// var trash_task_error = function() {
-//     alert("Sorry, unable to delete task");
-// }
+var trash_task_error = function() {
+  alert("Sorry, unable to delete task");
+}
 
-// // Trash the selected task
-// var trash_task = function() {
-//     task_id = this.trash_task_id;
-//     table_row = this.trash_task_row;
-//     url = fg_api_settings.base_url + '/' +
-//           fg_api_settings.version  +'/tasks/' + task_id;
-//     doDelete(url, trash_task_done, trash_task_error);
-//}
+// Delete the given task id
+ var trash_task = function(task_id) {
+  var url = fg_api_settings.base_url + '/' +
+            fg_api_settings.version  +'/tasks/' + task_id;
+  debug_obj.last_url = url;
+  doDelete(url, trash_task_done, trash_task_error);
+}
+
+// Entrypoint for deleting PALMS execution
+function delete_application() {
+  var task_id = last_submit_task.id;
+  confirm_dialog("Are you sure to delete task: '" + task_id + "'?", trash_task(task_id)); 
+}
 
 // Task record action
 // var do_action_button = function() {
@@ -371,6 +399,116 @@ function exec_application() {
 //     }
 // }
 
+// Update the tasklist record building the output file link using the output.txt file content
+var update_row_list = function(task_record, output_txt_data) {
+  debug_obj.last_data = output_txt_data;
+  var link_name = output_txt_data['output']['file_name'];
+  var link_url = output_txt_data['output']['url'];
+  if(output_txt_data['doi'] != null) {
+      link_name += " (" + output_txt_data['doi']['parameters'] + ")";
+  }
+  var table_link = "<a href=\"" + link_url + "\">" + link_name + "</a>";
+  $('#' + task_record['id'] + '_url').empty();
+  $('#' + task_record['id'] + '_url').append(table_link);
+  console.log('link: ' + table_link);
+}
+
+// Show a list of performed PALMS executions having details about the inputs
+// and the link to download the output file
+var list_exec = function() {
+  // The GUI will show a table where each row has the form:
+  // * <submit_icon> <submission_date> <model> <parameter> <output|link to FTP for download> for submission
+  // Model and parameters will be shown as DOIs if such information is available
+  // * <upload> <submission_date> '' '' <file_name|link to FTP for download> for uploads
+  var task_list =
+    "<h3>PALMS Executions</h3>" +
+    "<center>" +
+    "<table class=\"table\" id=\"task_list_table\">" +
+    "<tbody>" +
+    "</tbody>" +
+    "</table>" +
+    "</center>";
+
+  // Prepare a list of all submitted tasks
+  reset_area('task_list');
+  $('.task_list').append(task_list);
+  $('#btn_list').text('HIDE LIST');
+  $('#btn_list').on('click', function() {
+    reset_area('task_list');
+    $('#btn_list').text('LIST');
+    $('#btn_list').on('click', list_exec);
+  });
+
+  all_tasks = $('.task_info').data().task_info;
+  all_tasks.forEach(function(task_record) {
+    var task_action = task_record['arguments'][0];
+    switch(task_action) {
+      case 'submit':
+        console.log("list_exec: processing task_id: '" + task_record['id'] +
+                      "' having action: '" + task_action + "'");
+        var task_row =
+          "<tr id=\"task_" + task_record['id'] + "\">" +
+          "  <td id=\"" + task_record['id'] + "_action\"><i class=\"fas fa-server\"></i></td>" +
+          "  <td id=\"" + task_record['id'] + "_submitted\">" + task_record['creation'] + "</td>" +
+          "  <td id=\"" + task_record['id'] + "_model\">" + task_record['arguments'][2] + "</td>" +
+          "  <td id=\"" + task_record['id'] + "_parameters\">" + task_record['arguments'][3] + "</td>" +
+          "  <td id=\"" + task_record['id'] + "_url\"></td>" +
+          " </tr>";
+        $('#task_list_table tbody').append(task_row);
+        // To get the output file name, it is necessary to get the PALMS execution standard ouput
+        // which contains a json with the necessary output details to build a readable link
+        var output_files = task_record['output_files'];
+        output_files.forEach(function(output_file) {
+          if(output_file.name == 'output.txt') {
+            var output_file_url = output_file.url;
+            var url = fg_api_settings.base_url + '/' +
+                      fg_api_settings.version + '/' +
+                      output_file_url;
+            debug_obj.last_url = url;
+            doGet(url,
+              function(data) {
+                update_row_list(task_record, data);
+              },
+              function(jqXHR, exception) {
+                console.log("Unable to get output.txt for task having id: '" + task_record['id'] + "'");
+              });
+          }
+        });
+      break;
+
+      case 'upload':
+        var task_row =
+          "<tr id=\"task_" + task_record['id'] + "\">" +
+          "  <td id=\"" + task_record['id'] + "_action\"><i class=\"fas fa-file-upload\"></i></td>" +
+          "  <td id=\"" + task_record['id'] + "_submitted\">" + task_record['creation'] + "</td>" +
+          "  <td id=\"" + task_record['id'] + "_model\"></td>" +
+          "  <td id=\"" + task_record['id'] + "_parameters\"></td>" +
+          "  <td id=\"" + task_record['id'] + "_url\"></td>" +
+          " </tr>";
+        console.log("Task with id: '" + task_record['id'] + "' ");
+        // To get the uploaded file name, it is necessary to get the PALMS execution standard ouput
+        // which contains a json with the necessary details to build a readable link
+      break;
+
+      default:
+          // Just skipt the line
+          console.log("list_exec: ignoring task_id: '" + task_record['id'] +
+                      "' having action: '" + task_action + "'");
+      }
+  });
+}
+
+// Releases the FTP resources allocated to the user and remove any previous PAST
+// submission in FutureGateway as well
+var release_ftp = function() {
+  alert('Sorry, this functionality is not yet available!');
+}
+
+// Upload a given set of files into the FTP server
+var upload_ftp = function() {
+  alert('Sorry, this functionality is not yet available!');
+}
+
 // Set spinning button if argument is true otherwise set the normal button
 // This function also enable/disable the submit button
 var set_spin_button = function(spinning) {
@@ -399,18 +537,16 @@ var solve_output_doi = function() {
   DOI_Output.doi_extract(output_doi);
 }
 
-
-
 // Function that builds the GUI accordingly to the application
 // logic status
 var build_gui = function() {
   var output_doi_gui =
-    "<h4>Reproducibility</h4>" +
+    "<h3>Reproducibility</h3>" +
     "<p>This section gives the opportunity to reproduce PALMS results as they are registered in " +
     "<a href=\"https://www.openaccessrepository.it/search?q=palms%20Output\">OpenAccessRepository</a> " +
     "by placing its DOI reference in the OUTPUT DOI input field.</p>" +
     "<p>Once pressing the <strong>Prepare</strong> button, the related model and experiment files " +
-    "will be automatically extracted and place in the submitssion form.</p>" +
+    "will be automatically extracted and placed in the submitssion form.</p>" +
     "<form>" +
     "  <div class=\"form-group\">" +
     "    <label for=\"palms_exec_doi\">Output DOI</label>" +
@@ -426,7 +562,7 @@ var build_gui = function() {
     "<div class=\"doi_spin_button\" id=\"doi_spin_button\">" +
     "</div>";
   var exec_palms_gui =
-    "<h4>PALMS Execution</h4>" +
+    "<h3>PALMS Execution</h3>" +
     "<form>" +
     "  <div class=\"form-group\">" +
     "    <label for=\"palms_exec_model\">Model</label>" +
@@ -449,7 +585,23 @@ var build_gui = function() {
     "  </div>" +
     "</form>" +
     "<button id=\"btn_execute\" class=\"btn btn-primary\">Execute</button>";
-  var ftp_gui = "<h4>PALMS files</h4>";
+
+  var ftp_gui =
+    "<h3>PALMS files</h3>" +
+    "<p>Execution output files are available in your personal FTP area, you can access in <strong>read-only</strong> mode " +
+    "by pressing the 'FILES' button. For a detailed list of performed execution, press the 'LIST' button " +
+    "or you can select an alternative model or parameters files and upload it with the 'UPLOAD' button." +
+    " Finally to remove any PALMS submission and deallocate your FTP server press the 'RELEASE' button.</p>" +
+    "<center>" +
+    "<table width=\"90%\">" +
+    "  <tr>" +
+    "    <td><button id=\"btn_files\" class=\"btn btn-primary\">FILES</button></td>" +
+    "    <td><button id=\"btn_list\" class=\"btn btn-primary\">LIST</button></td>" +
+    "    <td><button id=\"btn_upload\" class=\"btn btn-primary\">UPLOAD</button></td>" +
+    "    <td><button id=\"btn_release\" class=\"btn btn-danger\">RELEASE</button></td>" +
+    "  </tr>" +
+    "</table>" +
+    "</center>";
 
   if(palms_info.is_ready()) {
     $('.gui').append(
@@ -457,12 +609,20 @@ var build_gui = function() {
       "<div id=\"exec_palms\">" + exec_palms_gui + "</div>");
     set_spin_button(false);
     $("#btn_solve_doi").on("click", solve_output_doi);
-    $("#btn_execute").on("click", refresh_page);
+    $("#btn_execute").on("click", exec_application);
   }
   if(ftp_server.is_ftp_running()) {
+    reset_area('ftp');
     $('.ftp').append(
       "<div id=\"ftp_gui\">" + ftp_gui + "</div>");
+      $("#btn_files").on("click", function() {
+        window.open(ftp_server.url.substring(0, ftp_server.url.lastIndexOf('/')));
+      });
+    $("#btn_list").on("click", list_exec);
+    $("#btn_release").on("click", release_ftp);
+    $("#btn_upload").on("click", upload_ftp);
   } else {
+    reset_area('ftp');
     $('.ftp').append(
       "<br/><div class=\"alert alert-warning alert-dismissible show\" role=\"alert\">" +
       "<strong>Information</strong> PALMS output files are not yet available." +
@@ -474,18 +634,28 @@ var build_gui = function() {
 }
 
 // Success case for proc_task_output
-var proc_task_output = function() {
+var proc_task_output_done = function(data) {
+  debug_obj.last_data = data;
+
   if(data['error'] != null) {
         $('.task_info').append(
-            "<p>The resource reservation process was not successful. " +
-            "The error message is: '" + data['error'] + "'. " +
-            "Pressing the following button, you can retry the submission" +
-            "<div class=\"submit\"><button type=\"button\"" +
-            "        id=\"submit_button\"" +
-            "        class=\"btn btn-danger\"" +
-            ">RETRY</button>" +
+            "<br/><div class=\"alert alert-warning alert-dismissible show\" role\"alert\">" +
+            "<strong>Information</strong> Last executed task was not successful. " +
+            "The error message is: <strong>'" + data['error'] + "'</strong>. " +
+            "Pressing the following buttons, you can retry the submission or delete the last " +
+            "executed task in case you would like to proceed with another PALMS execution." +
+            "<div class=\"submit\">" +
+            "  <button type=\"button\"" +
+            "          id=\"submit_button\"" +
+            "          class=\"btn btn-danger\">RETRY" +
+            "  </button>" +
+            "  <button type=\"button\"" +
+            "          id=\"delete_button\"" +
+            "          class=\"btn btn-danger\">DELETE" +
+            "  </button>" +
             "</div></p>");
-        //$("#submit_button").on("click", submitTask);
+        $("#submit_button").on("click", exec_application);
+        $("#delete_button").on("click", delete_application);
     return;
   } 
 
@@ -511,24 +681,25 @@ var proc_task_output = function() {
 
   // Extract information about HTTPD/FTP server
   ftp_server.reset();
-  ftp_server.user = data[0]['output']['ftp_user'];
-  ftp_server.password = data[0]['output']['ftp_pass'];
-  ftp_server.file = data[0]['output']['file_name'];
-  ftp_server.url = data[0]['output']['url'];
-  ftp_server.httpd_port = data[0]['container']['port'];
-  ftp_server.httpd_name = data[0]['container']['name'];
-  ftp_server.httpd_id = data[0]['container']['id'];
+  ftp_server.user = data['output']['ftp_user'];
+  ftp_server.password = data['output']['ftp_pass'];
+  ftp_server.file = data['output']['file_name'];
+  ftp_server.url = data['output']['url'];
+  ftp_server.httpd_port = data['container']['port'];
+  ftp_server.httpd_name = data['container']['name'];
+  ftp_server.httpd_id = data['container']['id'];
 
   // Extract information related to the last PALMS execution
   // DOI section could be not present
   palms_info.reset();
-  palms_info.model_url = data[0]['model'];
-  palms_info.params_url = data[0]['params'];
-  if(data[0]['doi'] != null) {
-    palms_info.model_doi = data[0]['doi']['model'];
-    palms_info.params_doi = data[0]['doi']['parameters'];
+  palms_info.model_url = data['model'];
+  palms_info.params_url = data['params'];
+  if(data['doi'] != null) {
+    palms_info.model_doi = data['doi']['model'];
+    palms_info.params_doi = data['doi']['parameters'];
   }
   palms_info.set_state('ready');
+  build_gui();
 }
 
 // Error case for proc_task_output
@@ -540,21 +711,23 @@ var proc_task_output_error = function(jqXHR, exception) {
 }
 
 // Retrieve PALMS information from task output stream
-var proc_task_output = function(resource_url) {
-  url = fg_api_settings.base_url + '/' +
-        fg_api_settings.version + '/' +
-        resource_url;
-  doGet(url, proc_task_output, proc_task_output_error);
+var proc_task_output = function(output_url) {
+  var url = fg_api_settings.base_url + '/' +
+            fg_api_settings.version + '/' +
+            output_url;
+  debug_obj.last_url = url;
+  doGet(url, proc_task_output_done, proc_task_output_error);
 }
 
 // Refresh button
 var refresh_page = function() {
-    resetAreas("task_info"); 
+    reset_area("task_info"); 
     check_tasks(application_name);
 }
 
 // Success case for get_task_info
 var proc_task_info = function(data) {
+  debug_obj.last_data = data;
   // Task may be one of:
   //.  doi-submit
   //   submit
@@ -580,6 +753,8 @@ var proc_task_info = function(data) {
       case 'upload':
         // This case should not be considered, since only submit and
         // relase actions are processed
+        console.log('Warning: got upload case in proc_task_info!');
+      case 'submit':
       default:
         // Prepare the list of task files
         task_files = {};
@@ -590,7 +765,6 @@ var proc_task_info = function(data) {
         $('.task_info').data('task_files', task_files);
         // Retrieve FTP information from the standard output
         proc_task_output(task_files['output.txt']);
-        palms_info.set_state('ready');
     }
   } else {
     // Notify a pending operation
@@ -599,9 +773,6 @@ var proc_task_info = function(data) {
     switch(task_action) {
       case 'release':
         action_desc = "FTP reource relasing is executing, please wait";
-      break;
-      case 'doi-submit':
-        action_desc = "A DOI submission of PALMS is executing, please wait";
       break;
       case 'submit':
         action_desc = "A submission of PALMS is executing, pleas wait";
@@ -615,15 +786,16 @@ var proc_task_info = function(data) {
          task_action +
          "' is executing";
     }
-    $('.task_info').append(
-        "<div class=\"refresh\">" +
-        "<p>" + action_desc + "</p>" +
-        "<p>Pressing the following button you can refresh the task status.</p>" +
-        "<button type=\"button\"" +
-        "        id=\"refresh_button\"" +
-        "        class=\"btn btn-success\"" +
-        ">REFRESH</button>" +
-        "</div>");
+    var pending_action_page =
+     "<div class=\"refresh\">" +
+     "<p>" + action_desc + "</p>" +
+     "<p>Pressing the following button you can refresh the task status.</p>" +
+     "<button type=\"button\"" +
+     "        id=\"refresh_button\"" +
+     "        class=\"btn btn-success\"" +
+     ">REFRESH</button>" +
+     "</div>";
+    $('.task_info').append(pending_action_page);
     $("#refresh_button").on("click", refresh_page);
     palms_info.set_state('waiting');
   }
@@ -631,131 +803,138 @@ var proc_task_info = function(data) {
 
 // Error case for get_task_info
 var proc_task_info_error = function(jqXHR, exception) {
-    resetAreas(".task_files");
+    reset_area(".task_files");
     reportError("Error retrieving output files of task: '" + data.id + "'",
                 user_support);
 }
 
 // Get task information
 function get_task_info(task_id) {
-   url = fg_api_settings.base_url + '/' +
-         fg_api_settings.version  + '/users/' +
-         fg_user_info.name + '/tasks/' +
-         task_id;
-    doGet(url, proc_task_info, proc_task_info_error);
+  var url = fg_api_settings.base_url + '/' +
+            fg_api_settings.version  + '/users/' +
+            fg_user_info.name + '/tasks/' +
+            task_id;
+  debug_obj.last_url = url;
+  doGet(url, proc_task_info, proc_task_info_error);
 }
 
 // Success case for check task 
 var proc_check_tasks = function(data) {
-    reset_area("task_info");
-    ftp_server.reset();
-    palms_info.reset();
-    // Process and create the task list
-    task_info = data['tasks'];
-    $('.task_info').data('task_info',data['tasks']);
-    // Process task information if necessary
-    ftp_resource = false;
-    if(task_info.length > 0) {
-        // Seek for last submission task or a pending operation
-        for(i=0; i<data['tasks'].length; i++) {
-          last_submit_task = data['tasks'][i];
-          console.log('Task #: ' + i +
-                      ', task_id: ' + last_submit_task['id'] +
-                      ', description: ' + last_submit_task['description'] +
-                      ', status: ' + last_submit_task['status']);
-          // Exit in case of submit or not DONE task
-          // DONE 'release' tasks should not be present, since this operation
-          // includes all previous tasks deletion
-          if(last_submit_task['description'].conatins('submit')  ||
-             last_submit_task['status'] != 'DONE') {
-            break;
-          }
+  debug_obj.last_data = data;
+  reset_area("task_info");
+  reset_area("ftp");
+  ftp_server.reset();
+  palms_info.reset();
+  // Process and create the task list
+  task_info = data['tasks'];
+  $('.task_info').data('task_info',data['tasks']);
+  // Process task information if necessary
+  ftp_resource = false;
+  if(task_info.length > 0) {
+      // Seek for last submission task or a pending operation
+      for(i=0; i<data['tasks'].length; i++) {
+        last_submit_task = data['tasks'][i];
+        console.log('Task #: ' + i +
+                    ', task_id: ' + last_submit_task['id'] +
+                    ', description: ' + last_submit_task['description'] +
+                    ', status: ' + last_submit_task['status']);
+        // Exit in case of submit or not DONE task
+        // DONE 'release' tasks should not be present, since this operation
+        // includes all previous tasks deletion
+        if(last_submit_task['description'].includes('submit') ||
+           last_submit_task['status'] != 'DONE') {
+          break;
         }
-        get_task_info(last_submit_task.id);
-    } else {
-      // When no tasks are available the application is ready to operate
-      palms_info.set_state('ready');
-    }
-    // Build the GUI accordingly to the current task situation
-    build_gui();
+      }
+      get_task_info(last_submit_task.id);
+  } else {
+    // When no tasks are available the application is ready to operate
+    palms_info.set_state('ready');
+  }
+  // Build the GUI accordingly to the current task situation
+  build_gui();
 }
 
 // Error case for check task
 var proc_check_tasks_error = function(jqXHR, exception) {
-    reset_area("task_info");
-    report_error("Error retrieving task information for '" +
-                 application_name + "' application. ",
-                 user_support);
+  reset_area("task_info");
+  report_error("Error retrieving task information for '" +
+               application_name + "' application. ",
+               user_support);
 }
 
 // Check task
 function check_tasks(application) {
-   url = fg_api_settings.base_url + '/' +
-         fg_api_settings.version  + '/users/' +
-         fg_user_info.name + '/tasks?application=' +
-         application;
-    doGet(url, proc_check_tasks, proc_check_tasks_error);
+  var url = fg_api_settings.base_url + '/' +
+        fg_api_settings.version  + '/users/' +
+        fg_user_info.name + '/tasks?application=' +
+        application;
+  debug_obj.last_url = url;
+  doGet(url, proc_check_tasks, proc_check_tasks_error);
 }
 
 // Success case for check_app
 var proc_check_app_tasks = function(data) {
-    if(data.id != null) {
-        // Application hidden data
-        app_info = {
-            'id': data.id,
-            'name': data.name,
-        };
-        $('.app_info').data('app_info',app_info)
-        // Now check the application tasks
-        check_tasks(application_name);
-    } else {
-        reset_area("app_info");
-        report_error("It seems the application '" + application_name +
-                     "' is not registered in FutureGateway. ",
-                      user_support);
-    }
+  debug_obj.last_data = data;
+  if(data.id != null) {
+      // Application hidden data
+      app_info = {
+          'id': data.id,
+          'name': data.name,
+      };
+      $('.app_info').data('app_info',app_info)
+      // Now check the application tasks
+      check_tasks(application_name);
+  } else {
+      reset_area("app_info");
+      report_error("It seems the application '" + application_name +
+                   "' is not registered in FutureGateway. ",
+                    user_support);
+  }
 }
 
 //Error case for check_app
 var proc_check_app_tasks_error = function(jqXHR, exception) {
-    reset_area("app_info");
-    report_error("Error retriving '" + application_name + "' application " +
-                 "information from FutureGateway. Please ensure your " +
-                 "membership has the necessary rights to access '" +
-                 application_name + "' application.",
-                 user_support);
+  reset_area("app_info");
+  report_error("Error retriving '" + application_name + "' application " +
+               "information from FutureGateway. Please ensure your " +
+               "membership has the necessary rights to access '" +
+               application_name + "' application.",
+               user_support);
 }
 
 // Check application
 function check_app_tasks(application) { 
-   url = fg_api_settings.base_url + '/' +
+   var url = fg_api_settings.base_url + '/' +
          fg_api_settings.version + '/applications/' +
          application;
+    debug_obj.last_url = url;
     doGet(url, proc_check_app_tasks, proc_check_app_tasks_error);
 }
 
 // Success case for check_user_app_tasks
 var proc_user_app_tasks = function(data) {
-    if(data.id != null &&
-       data.mail != 'default@liferay.com') {
-        // User hidden data
-        user_info = {
-            'id': data.id,
-            'first_name': data.first_name,
-            'last_name': data.last_name,
-            'email': data.mail,
-            'creation': data.creation,
-            'modified': data.modified,
-        };
-        $('.user_info').data('user_info',user_info);
-        // User information recovered, it is possible to check the app.
-        check_app_tasks(application_name);
-    } else {
-        reset_area("user_info");
-        report_error("It seems you are not yet registered as " +
-                     "FutureGateway user.",
-                     user_support);
-    }
+  debug_obj.last_data = data;
+  if(data.id != null &&
+     data.mail != 'default@liferay.com') {
+      // User hidden data
+      user_info = {
+          'id': data.id,
+          'first_name': data.first_name,
+          'last_name': data.last_name,
+          'email': data.mail,
+          'creation': data.creation,
+          'modified': data.modified,
+      };
+      $('.user_info').data('user_info',user_info);
+      // User information recovered, it is possible to check the app.
+      check_app_tasks(application_name);
+  } else {
+      reset_area("user_info");
+      report_error("It seems you are not yet registered as " +
+                   "FutureGateway user.",
+                   user_support);
+  }
 }
 
 // Error case for check_user_app_task
@@ -767,9 +946,11 @@ var proc_user_app_tasks_error = function(jqXHR, exception) {
 
 // Check user application and task
 function check_user_app_tasks() {
-    url = fg_api_settings.base_url + '/' +
+    debug_obj.reset();
+    var url = fg_api_settings.base_url + '/' +
           fg_api_settings.version  +'/users/' +
           fg_user_info.name;
+    debug_obj.last_url = url;
     doGet(url, proc_user_app_tasks, proc_user_app_tasks_error);
 }
 
