@@ -821,10 +821,16 @@ function get_task_info(task_id) {
 // Success case for check task 
 var proc_check_tasks = function(data) {
   debug_obj.last_data = data;
-  reset_area("task_list");
-  reset_area("exec_palms");
-  reset_area("task_info");
-  reset_area("ftp");
+  var clean_areas = [ "error",
+                      "user_info",
+                      "app_info",
+                      "task_info",
+                      "gui",
+                      "ftp",
+                      "task_list"];
+  clean_areas.forEach(function(area) {
+    reset_area(area);
+  });
   ftp_server.reset();
   palms_info.reset();
   // Process and create the task list
