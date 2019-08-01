@@ -821,6 +821,8 @@ function get_task_info(task_id) {
 // Success case for check task 
 var proc_check_tasks = function(data) {
   debug_obj.last_data = data;
+  reset_area("task_list");
+  reset_area("exec_palms");
   reset_area("task_info");
   reset_area("ftp");
   ftp_server.reset();
@@ -851,8 +853,6 @@ var proc_check_tasks = function(data) {
     // When no tasks are available the application is ready to operate
     palms_info.set_state('ready');
   }
-  // Build the GUI accordingly to the current task situation
-  build_gui();
 }
 
 // Error case for check task
