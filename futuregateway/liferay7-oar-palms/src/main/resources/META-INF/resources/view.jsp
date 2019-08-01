@@ -1,4 +1,5 @@
 <%@ include file="/init.jsp" %>
+<link rel="stylesheet" href="<%=request.getContextPath()%>/css/all.css"/>
 
 <div id="<portlet:namespace />"></div>
 
