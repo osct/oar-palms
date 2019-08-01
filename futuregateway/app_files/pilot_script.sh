@@ -33,8 +33,8 @@ instantiate_compose_template() {
 #    <DOI number> DOI number, if altrady an URL it will be ignored
 #    <DOI type> DOI type tells if it is a parameter or a model DOI
 doi2url() {
-  INPDOI=$1
-  DOITYPE=$2
+  INPDOI=$(echo $1)
+  DOITYPE=$(echo $2)
   ISURL=$(echo $INPDOI | sed 's/^http.*/URL/')
   # Skip URLs
   [ "$ISURL" == "URL" ] &&\
@@ -72,19 +72,19 @@ doi2url() {
 execute_PALMS() {
 
   # Check arguments: user 
-  CUSER=$1
+  CUSER=$(echo $1)
   [ "$CUSER" = "" ] &&\
     ERR_MSG="No username specified" &&\
     return 1
 
-  REPAST_MODEL=$2
+  REPAST_MODEL=$(echo $2)
   MODEL_CHECK=0
   [ "$REPAST_MODEL" = "" ] &&\
     ERR_MSG="No model URL file given" &&\
     return 1
   doi2url $REPAST_MODEL "model"
   
-  REPAST_PARAMS=$3
+  REPAST_PARAMS=$(echo $3)
   PARAMS_CHECK=0
   [ "$REPAST_PARAMS" = "" ] &&\
     ERR_MSG="No params URL file given" &&\
@@ -179,7 +179,7 @@ EOF
 #    <user> The user to associate the allocated HTTP for output
 release_PALMS() {
   # Check arguments: user 
-  CUSER=$1
+  CUSER=$(echo $1)
   [ "$CUSER" = "" ] &&\
     ERR_MSG="No username specified" &&\
     return 1
@@ -207,7 +207,7 @@ EOF
 #
 list_PALMS() {
 
-  CUSER=$1
+  CUSER=$(echo $1)
   [ "$CUSER" = "" ] &&\
     ERR_MSG="No username specified" &&\
     return 1
@@ -256,7 +256,7 @@ list_PALMS() {
 #
 clear_PALMS() {
 
-  CUSER=$1
+  CUSER=$(echo $1)
   [ "$CUSER" = "" ] &&\
     ERR_MSG="No username specified" &&\
     return 1
@@ -314,7 +314,7 @@ EOF
 #
 upload_PALMS() {
 
-  CUSER=$1
+  CUSER=$(echo $1)
   [ "$CUSER" = "" ] &&\
     ERR_MSG="No username specified" &&\
     return 1
@@ -393,7 +393,7 @@ ERR_MSG=""
 JSON_OUT=$(mktemp)
 
 # Command must exist and it can be only submit or release
-CMD=$1
+CMD=$(echo $1)
 [ "$1" = "" ] &&\
   ERR_MSG="No command provided: <submit|release>"
 
