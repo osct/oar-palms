@@ -212,7 +212,6 @@ function do_task(model, parameters) {
                        "'" + fg_user_info.name + "'",
                        "'" + model + "'",
                        "'" + parameters + "'" ],
-        //"output_files": [{"name": "repast.json"}],
         "output_files": [],
     };
     // Performs the FG Task submitssion
@@ -277,29 +276,33 @@ function exec_application() {
 //     return runtime_value;
 // }
 
-// Success trash_task
-var trash_task_done = function() {
-  alert("Task successfully removed");
-  check_tasks(application_name);
-}
 
-// Error trash_task
-var trash_task_error = function() {
-  alert("Sorry, unable to delete task");
-}
-
-// Delete the given task id
- var trash_task = function(task_id) {
+// Delete the given task id, this function may operate in silent or verbose mode
+var trash_task = function(task_id, silent_mode) {
   var url = fg_api_settings.base_url + '/' +
             fg_api_settings.version  +'/tasks/' + task_id;
   debug_obj.last_url = url;
-  doDelete(url, trash_task_done, trash_task_error);
+  doDelete(url,
+           function(data) {
+              if(silent_mode) {
+                console.log("Removed task: '" + task_id + "'");
+              } else {
+                alert("Task having id: " + task_id + " successfully removed");
+                check_tasks(application_name);
+              }
+            },
+            function(data) {
+              alert("Sorry, unable to delete task: '" + task_id + "'");
+            });
 }
 
 // Entrypoint for deleting PALMS execution
 function delete_application() {
   var task_id = last_submit_task.id;
-  confirm_dialog("Are you sure to delete task: '" + task_id + "'?", trash_task(task_id)); 
+  confirm_dialog("Are you sure to delete task: '" + task_id + "'?",
+                 function() {
+                   trash_task(task_id, false);
+                 }); 
 }
 
 // Task record action
@@ -404,7 +407,8 @@ var update_row_list = function(task_record, output_txt_data) {
   debug_obj.last_data = output_txt_data;
   var link_name = output_txt_data['output']['file_name'];
   var link_url = output_txt_data['output']['url'];
-  if(output_txt_data['doi'] != null) {
+  if(output_txt_data['doi'] != null &&
+     output_txt_data['doi']['parameters'] != '') {
       link_name += " (" + output_txt_data['doi']['parameters'] + ")";
   }
   var table_link = "<a href=\"" + link_url + "\">" + link_name + "</a>";
@@ -498,10 +502,42 @@ var list_exec = function() {
   });
 }
 
+// Success case for 'relelase' execution
+var release_resources_success = function() {
+  alert("Request to release resources successfully sent");
+  check_tasks(application_name);
+}
+
+// Failure case for 'release execution'
+var release_resources_error = function() {
+  alert("Sorry, your request to release resources has failed");
+}
+
+// Release all resources allocated to the user. This function foresees the steps:
+//. 1) Execute the release command
+//. 2) On successful, delete all tasks ('delete' task included)
+//.    This second step is automatically handled by check_task flow
+var release_resources = function() {
+  console.log("releasing resources ...");
+  // Execute Submit POST command
+  var url = fg_api_settings.base_url + '/' +
+            fg_api_settings.version  +'/tasks';
+  debug_obj.last_url = url;
+  task_data = {
+      "application": application_id,
+      "description": "fgsg - release for user '" + fg_user_info.name + "'",
+      "arguments": [ "release",
+                     "'" + fg_user_info.name + "'"],
+      "output_files": [],
+  };
+  // Performs the FG Task submitssion
+  doPost(url, task_data, release_resources_success, release_resources_error);
+}
+
 // Releases the FTP resources allocated to the user and remove any previous PAST
 // submission in FutureGateway as well
 var release_ftp = function() {
-  alert('Sorry, this functionality is not yet available!');
+  confirm_dialog("Are you sure to release your FTP resource deleting your output files as well?", release_resources); 
 }
 
 // Upload a given set of files into the FTP server
@@ -746,9 +782,17 @@ var proc_task_info = function(data) {
     // still existing or not by checking release action
     switch(task_action) {
       case 'release':
+        // When status is DONE for release case, imply to remove
+        // any pre-existing task from FG
+        task_info.forEach(function(task) {
+          trash_task(task['id'], true);
+        });
+        // After processing the whole tasks, empty its list
+        task_info = [];
         ftp_server.reset();
         palms_info.reset();
         palms_info.set_state('ready');
+        build_gui();
       break;
       case 'upload':
         // This case should not be considered, since only submit and
@@ -775,7 +819,7 @@ var proc_task_info = function(data) {
         action_desc = "FTP reource relasing is executing, please wait";
       break;
       case 'submit':
-        action_desc = "A submission of PALMS is executing, pleas wait";
+        action_desc = "A submission of PALMS is executing, please wait";
       break;
       case 'upload':
         action_desc = "An upload opreation is executing, please wait";
@@ -839,7 +883,6 @@ var proc_check_tasks = function(data) {
   // Process task information if necessary
   ftp_resource = false;
   if(task_info.length > 0) {
-      // Seek for last submission task or a pending operation
       for(i=0; i<data['tasks'].length; i++) {
         last_submit_task = data['tasks'][i];
         console.log('Task #: ' + i +
@@ -850,7 +893,9 @@ var proc_check_tasks = function(data) {
         // DONE 'release' tasks should not be present, since this operation
         // includes all previous tasks deletion
         if(last_submit_task['description'].includes('submit') ||
-           last_submit_task['status'] != 'DONE') {
+           last_submit_task['status'] != 'DONE' ||
+           (last_submit_task['status'] == 'DONE' &&
+            last_submit_task['description'].includes('release'))) {
           break;
         }
       }
@@ -858,6 +903,7 @@ var proc_check_tasks = function(data) {
   } else {
     // When no tasks are available the application is ready to operate
     palms_info.set_state('ready');
+    build_gui();
   }
 }
 

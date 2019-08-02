@@ -4,6 +4,9 @@
 #
 # Author: <riccardo.bruno@ct.infn.it>
 
+# This script requires container_manager functions to operate correctly
+source ~/.container_manager
+
 HOST=fgsg.ct.infn.it
 DOI=https://doi.org
 OAR=https://www.openaccessrepository.org
@@ -215,10 +218,12 @@ release_PALMS() {
   instantiate_compose_template $PORT
 
   # Release the allocated FTP server
+  export COMPOSE_PROJECT_NAME=palms_$CUSER
   docker-compose down -v &&\
   OUT_MSG="Container resources removed successfully" ||
   ERR_MSG="Error removing container resources: '"$(cat docker-compose.yaml)"'"
 
+  # Produce output
   cat >$JSON_OUT <<EOF
 {
  "user": "${CUSER}",
