@@ -12,7 +12,6 @@ services:
      - palms_network_<USER>
     environment:
      - USERS=<FTP_USER>|<FTP_PASS>
-    container_name: palms_ftpd_<USER>
 
   repast_<USER>:
     depends_on:
