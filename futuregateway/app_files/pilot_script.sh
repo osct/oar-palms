@@ -27,6 +27,28 @@ instantiate_compose_template() {
   sed -i s/"<USER>"/$CUSER/g docker-compose.yaml
 }
 
+# Automatically determine if the given user has an active HTTP/FTP port assigned
+#
+# Arguments:
+#.  [<user>] The username if variable $CUSER is not set
+locate_user_resources() {
+  [ "$CUSER" = "" ] &&\
+    CUSER=$(echo $1)
+  [ "$CUSER" = "" ] &&\
+    PORT="" &&\
+    return 1
+
+  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  [ "$HTTPDFTP_CNT" != "" ] &&\
+    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
+    PORT=""
+
+  [ "$PORT" = "" -o "$PORT" = "null" ] &&\
+    return 1
+
+  return 0
+}
+
 # Tranlsate a given DOI number into its referenced URL address
 #
 # Arguments:
@@ -92,12 +114,9 @@ execute_PALMS() {
   doi2url $REPAST_PARAMS "parameters"
 
   # Automatically determine if the given user has an active HTTP/FTP port assigned
-  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
-  [ "$HTTPDFTP_CNT" != "" ] &&\
-    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
-    PORT=""
+  locate_user_resources
 
-  if [ "$PORT" = "" ]; then
+  if [ $? -ne 0 ]; then
     # This script uses container_manager scripts to allocate containers
     # and retrieve a given port
     ALLOWED_PALMS=$(request_containers oar_palms 1)
@@ -184,8 +203,15 @@ release_PALMS() {
     ERR_MSG="No username specified" &&\
     return 1
 
+  # Automatically determine if the given user has an active HTTP/FTP port assigned
+  locate_user_resources
+
+  [ $? -ne 0 ] &&\
+    ERR_MSG="No port exists for user $CUSER" &&\
+    return 1
+
   # Customize template file to generate instance docker-compse.yaml file
-  instantiate_compose_template 99999 
+  instantiate_compose_template $PORT
 
   # Release the allocated FTP server
   docker-compose down -v &&\
@@ -213,12 +239,9 @@ list_PALMS() {
     return 1
   
   # Automatically determine if the given user has an active HTTP/FTP port assigned
-  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
-  [ "$HTTPDFTP_CNT" != "" ] &&\
-    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
-    PORT=""
+  locate_user_resources
 
-  [ "$PORT" = "" ] &&\
+  [ $? -ne 0 ] &&\
     ERR_MSG="No port exists for user $CUSER" &&\
     return 1
   
@@ -262,12 +285,9 @@ clear_PALMS() {
     return 1
 
   # Automatically determine if the given user has an active HTTP/FTP port assigned
-  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
-  [ "$HTTPDFTP_CNT" != "" ] &&\
-    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
-    PORT=""
+  locate_user_resources
 
-  [ "$PORT" = "" ] &&\
+  [ $? -ne 0 ] &&\
     ERR_MSG="No port exists for user $CUSER" &&\
     return 1
       
@@ -320,12 +340,9 @@ upload_PALMS() {
     return 1
 
   # Automatically determine if the given user has an active HTTP/FTP port assigned
-  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
-  [ "$HTTPDFTP_CNT" != "" ] &&\
-    PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
-    PORT=""
+  locate_user_resources
 
-  [ "$PORT" = "" ] &&\
+  [ $? -ne 0 ] &&\
     ERR_MSG="No port exists for user $CUSER" &&\
     return 1
         
@@ -442,3 +459,4 @@ fi
 
 # Show the output
 cat $JSON_OUT
+
