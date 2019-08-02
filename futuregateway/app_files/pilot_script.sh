@@ -138,6 +138,7 @@ execute_PALMS() {
 
   # Start the REPAST PALMS execution
   export HTTP_OUT_PORT
+  export COMPOSE_PROJECT_NAME=palms_$CUSER
   docker-compose run --rm\
 	             repast_$CUSER\
                           /opt/execute.sh $FTP_USER\
