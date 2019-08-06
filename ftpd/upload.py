@@ -35,9 +35,9 @@ def upload_file():
       try:
         fn = os.path.basename(fileitem.filename)
         open('/ftp/' + username + '/' + fn, 'wb').write(fileitem.file.read())
-        message += '<li>The file "<b>' + fn + '</b>" was uploaded successfully</li>'
+        message += '<li>The file "<b>' + fn + '</b> was uploaded successfully</li>'
       except:
-        message = '<li>file' + fn + 'was not uploaded</li>'
+        message = '<li>file <b>' + fn + '</b> was not uploaded</li>'
     else:
       message = '<li>Sorry, no file(s) provided</li>'
   return message, username

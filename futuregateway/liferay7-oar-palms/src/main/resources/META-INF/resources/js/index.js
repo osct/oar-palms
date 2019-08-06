@@ -94,7 +94,7 @@ var welcomeText =
   "<p>This application executes REPAST PALMS simulations in conjunction with " +
   "the <a href=\"https://www.openaccessrepository.it/search?q=palms\"" +
   "target=\"_blank\">Open Access Repository</a></p>" +
-  "<p>This application can be also used to run existing models and parameters " +
+  "<p>This application can also be used to run existing models and parameters " +
   "or execute customised simulations uploading models and/or parameters files.</p>";
 
 // Function providing application page structure

@@ -149,6 +149,10 @@ execute_PALMS() {
                                           ftp://ftpd_$CUSER/\
                                           "$REPAST_MODEL"\
                                           "$REPAST_PARAMS" > docker.out 2>docker.err
+  [ $? -ne 0 ] &&\
+    ERR_MSG="Execution of PALMS with model: $REPAST_MODEL and parameters: $REPAST_PARAMS failed" &&\
+    return 1
+
   # Store container execution into the error file
   echo "Docker run (begin)" >&2
   echo "[output]" >&2
@@ -162,6 +166,12 @@ execute_PALMS() {
   
   # Get FTP/HTTPD container Id
   HTTPD_CNT=$(docker ps -a | grep palms | grep $CUSER | grep $HTTP_OUT_PORT | awk '{ print $1 }')
+  [ "$HTTPD_CNT" = "" ] &&\
+    ERR_MSG="Unable to identify the FTP/HTTPD container associated to the PALMS execution" &&\
+    return 1
+
+  # FTP/HTTPD container requires special flags to enable file upload by its cgi script
+  docker exec $HTTPD_CNT chmod -R g+w,o+w /ftp
 
   # Get the list of output files
   FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT}
