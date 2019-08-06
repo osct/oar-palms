@@ -41,7 +41,7 @@ docker-compose run --rm repast\
                                         ftp://ftpd/\
                                         "$REPAST_MODEL"\
                                         "$REPAST_PARAMS" 
-# To ge the output
+# To get the output
 REPAST_OUT=out_$(basename $REPAST_PARAMS).tar
 curl localhost:$HTTP_OUT_PORT/$FTP_USER/$REPAST_OUT > $REPAST_OUT
 # Release the allocated FTP server

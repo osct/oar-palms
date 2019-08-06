@@ -1,0 +1,17 @@
+<html>
+<head>
+  <title>PALMS FTP server file upload</title>
+</head>
+<body bgcolor="f0f0f8">
+   <font color="#0f0f1d" face="helvetica, arial">
+   <h2>PALMS FTP server file upload</h2>
+   <p>Use this page to upload PALMS files into your own FTP server. You can later use published HTTP file URLs to execute PALMS with custom model and/or parameters files.</p>
+   <form enctype = "multipart/form-data"
+         action = "upload.py" method = "post">
+   <p>File: <input type = "file" name = "filenames" multiple/></p>
+   <p><input type="hidden" name="user" value="brunor" /></p>
+   <p><input type = "submit" value = "Upload" /></p>
+   </form>
+   </font>
+</body>
+</html>
