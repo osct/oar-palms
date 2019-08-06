@@ -15,6 +15,8 @@ RUN apk --no-cache add vsftpd\
     sed -i "s/^#cgipat.*/cgipat=**.sh|**.cgi|**.py/" /etc/mini_httpd/mini_httpd.conf &&\
     echo "mini_httpd.conf" &&\
     cat /etc/mini_httpd/mini_httpd.conf &&\
+    mkdir -p /ftp &&\
+    chmod -R o+w /ftp &&\
     echo "Docker image setup, completed"
 
 COPY ftpd.sh /bin/ftpd.sh
