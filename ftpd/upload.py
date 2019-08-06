@@ -3,13 +3,24 @@ import cgi, os
 import cgitb; cgitb.enable()
 form = cgi.FieldStorage()
 
-# FTP Username 
-#username = os.environ['USERS'].split('|')[0]
-username = form['user'].value
+# Get FTP username from /ftp dir
+def get_username():
+  basepath = '/ftp'
+  for f in os.listdir(basepath):
+    if os.path.isdir(os.path.join(basepath, f)):
+        # User directory identified
+        return f
+  return None
 
 def upload_file():
   fn = ''
   message = ''
+
+  username = get_username()
+
+  if username is None:
+    return '<li>Sorry, unable to identify FTP server username</li>'
+
   if not 'filenames' in form:
     return '<li>Sorry, no files to upload provided</li>'
 
@@ -29,12 +40,12 @@ def upload_file():
         message = '<li>file' + fn + 'was not uploaded</li>'
     else:
       message = '<li>Sorry, no file(s) provided</li>'
-  return message  
+  return message, username
 
 #
 # Main code
 #
-message = upload_file()
+message, username = upload_file()
 
 print("""\
 Content-Type: text/html\n
