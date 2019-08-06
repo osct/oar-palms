@@ -12,7 +12,7 @@ RUN apk --no-cache add vsftpd\
     sed -i "s/^user=.*/user=minihttpd/" /etc/mini_httpd/mini_httpd.conf &&\
     sed -i "s/^dir=.*/dir=\\/ftp/" /etc/mini_httpd/mini_httpd.conf &&\
     sed -i "s/^#nochroot/nochroot/" /etc/mini_httpd/mini_httpd.conf &&\
-    sed -i "s/^#cgipat.*/cgipat=**.sh|**.cgi|**.py/" /etc/mini_httpd/mini_httpd.conf &&\
+    sed -i "s/^#cgipat.*/cgipat=upload.py/" /etc/mini_httpd/mini_httpd.conf &&\
     echo "mini_httpd.conf" &&\
     cat /etc/mini_httpd/mini_httpd.conf &&\
     mkdir -p /ftp &&\
