@@ -171,7 +171,10 @@ execute_PALMS() {
     return 1
 
   # FTP/HTTPD container requires special flags to enable file upload by its cgi script
-  docker exec $HTTPD_CNT chmod -R g+w,o+w /ftp
+  docker exec $HTTPD_CNT chmod g+w,o+w,g+x,o+x /ftp/$CUSER
+  [ $? -ne 0 ] &&\
+    ERR_MSG="Unable to assign directory premissions to the user '"$CUSER"'" &&\
+    return 1
 
   # Get the list of output files
   FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT}
