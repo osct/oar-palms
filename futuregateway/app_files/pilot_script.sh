@@ -133,7 +133,7 @@ execute_PALMS() {
     FTP_PASS=""
   else
     HTTP_OUT_PORT=$PORT
-    FTP_PASS=$(docker exec $HTTPDFTP_CNT env | grep UDnWQOFx | awk -F'|' '{ print $2 }')
+    FTP_PASS=$(docker exec $HTTPDFTP_CNT env | grep USERS | awk -F'|' '{ print $2 }')
   fi
 
   # Customize template file to generate instance docker-compse.yaml file
