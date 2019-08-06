@@ -542,7 +542,8 @@ var release_ftp = function() {
 
 // Upload a given set of files into the FTP server
 var upload_ftp = function() {
-  alert('Sorry, this functionality is not yet available!');
+  upload_url = ftp_server.url.substring(0,ftp_server.url.lastIndexOf(fg_user_info.name)) + 'upload.html';
+  window.open(upload_url);
 }
 
 // Set spinning button if argument is true otherwise set the normal button
