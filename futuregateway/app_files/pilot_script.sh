@@ -41,7 +41,7 @@ locate_user_resources() {
     PORT="" &&\
     return 1
 
-  HTTPDFTP_CNT=$(docker ps -a | grep osct/ftpd | grep $CUSER | awk '{ print $1 }')
+  HTTPDFTP_CNT=$(docker ps -a | grep palms | grep $CUSER | awk '{ print $1 }')
   [ "$HTTPDFTP_CNT" != "" ] &&\
     PORT=$(docker inspect $HTTPDFTP_CNT | jq .[0].NetworkSettings.Ports | jq '."80/tcp"[0].HostPort' | xargs echo) ||\
     PORT=""
@@ -161,7 +161,7 @@ execute_PALMS() {
   REPAST_OUT=out_$(basename $REPAST_PARAMS).tar
   
   # Get FTP/HTTPD container Id
-  HTTPD_CNT=$(docker ps -a | grep osct/ftpd | grep $HTTP_OUT_PORT | awk '{ print $1 }')
+  HTTPD_CNT=$(docker ps -a | grep palms | grep $CUSER | grep $HTTP_OUT_PORT | awk '{ print $1 }')
 
   # Get the list of output files
   FILE_URL=http://$HOST:${HTTP_OUT_PORT}/${FTP_USER}/${REPAST_OUT}
