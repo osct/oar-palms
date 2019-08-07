@@ -90,12 +90,15 @@ palms_info = {
 
 // Welcome text introduces the application to the user
 var welcomeText =
-  "<h1>OAR-PALMS</h1>" + 
-  "<p>This application executes REPAST PALMS simulations in conjunction with " +
-  "the <a href=\"https://www.openaccessrepository.it/search?q=palms\"" +
-  "target=\"_blank\">Open Access Repository</a></p>" +
-  "<p>This application can also be used to run existing models and parameters " +
-  "or execute customised simulations uploading models and/or parameters files.</p>";
+  "<h1>Reproducibility and reusability of Physical Activity Lifelong Modelling & Simulations</h1>" + 
+  "<p>This application executes <a href=\"https://repast.github.io/\" target=\"_blank\">REPAST</a>-based " +
+  "<a href=\"https://www.openaccessrepository.it/communities/palms-sim/?page=1&size=20\" target=\"_blank\">" +
+  "<b>Physical Activity Lifelong Modelling & Simulations</b></a> (PALMS) in conjunction with " +
+  "the new <a href=\"https://www.openaccessrepository.it\" " +
+  "target=\"_blank\">INFN Open Access Repository</a> (INFN OAR) powered by <a href=\"https://invenio-software.org/\" target=\"_blank\">Invenio v3</a> " +
+  "and <a href=\"https://zenodo.org/\">Zenodo</a> software.</p>" +
+  "<p>This application can be used to run both existing and new models and parameters.</p>" +
+  "<p>Execution outputs are available at the bottom of this page in the section \"PALMS outputs\".</p>";
 
 // Function providing application page structure
 function build_page() {
@@ -578,12 +581,11 @@ var solve_output_doi = function() {
 // logic status
 var build_gui = function() {
   var output_doi_gui =
-    "<h3>Reproducibility</h3>" +
-    "<p>This section gives the opportunity to reproduce PALMS results as they are registered in " +
-    "<a href=\"https://www.openaccessrepository.it/search?q=palms%20Output\">OpenAccessRepository</a> " +
-    "by placing its DOI reference in the OUTPUT DOI input field.</p>" +
-    "<p>Once pressing the <strong>Prepare</strong> button, the related model and experiment files " +
-    "will be automatically extracted and placed in the submitssion form.</p>" +
+    "<h3>Reproducibility/reusability of PALMS results stored on the INFN OAR</h3>" +
+    "<p>This section gives the opportunity to reproduce PALMS <a href=\"https://www.openaccessrepository.it/search?q=palms%20Output\" target=\"_blank\">results</a> registered in " +
+    "the corresponding <a href=\"https://www.openaccessrepository.it/communities/palms-sim/?page=1&size=20\" target=\"blank\">community</a> of the INFN OAR</a> " +
+    "by placing its <a href=\"https://en.wikipedia.org/wiki/Digital_object_identifier\"><b>Digital Object Identifier</b></a> (DOI) reference in the \"Output DOI\" field below.</p>" +
+    "<p>Pressing the <strong>Prepare</strong> button, the related model and parameters will be automatically extracted and placed in the following \"PALMS Execution\" fields.</p>" +
     "<form>" +
     "  <div class=\"form-group\">" +
     "    <label for=\"palms_exec_doi\">Output DOI</label>" +
@@ -599,7 +601,9 @@ var build_gui = function() {
     "<div class=\"doi_spin_button\" id=\"doi_spin_button\">" +
     "</div>";
   var exec_palms_gui =
-    "<h3>PALMS Execution</h3>" +
+    "<h3>PALMS execution</h3>" +
+    "<p>Please, insert a reference to PALMS <b>model</b> and <b>parameters</b> in DOI or HTTP URL format <small>(e.g., 10.15161/oar.it/23504 or http://jobserver2.hopto.org/repast/PALMS/input/batch_params.xml_0)</small>.</p>" +
+    "<p>Pressing the <b>Execute</b> button, PALMS software will be executed using the \"Model\" and \"Parameters\" fields specified below.</p>" +
     "<form>" +
     "  <div class=\"form-group\">" +
     "    <label for=\"palms_exec_model\">Model</label>" +
@@ -609,7 +613,7 @@ var build_gui = function() {
     "           id=\"palms_model\"" +
     "           aria-describedby=\"help_model\"" +
     "           placeholder=\"PALMS model\">" +
-    "    <small id=\"help_mod\" class=\"form-text text-muted\">PALMS model archive file as OAR' DOI or http URL format</small>" +
+    "    <small id=\"help_mod\" class=\"form-text text-muted\">Model as OAR' DOI or HTTP URL format</small>" +
     "  </div>" +
     "  <div class=\"form-group\">" +
     "    <label for=\"palms_exec_params\">Parameters</label>" +
@@ -617,25 +621,27 @@ var build_gui = function() {
     "           class=\"form-control\"" +
     "           name=\"palms_parameters\"" +
     "           id=\"palms_parameters\"" +
-    "           placeholder=\"PALMS parameters file as OAR' DOI or http URL format\">" +
-    "    <small id=\"help_mod\" class=\"form-text text-muted\">Place Ouptut DOI reference</small>" +
+    "           placeholder=\"PALMS parameters\">" +
+    "    <small id=\"help_mod\" class=\"form-text text-muted\">Parameters as DOI or HTTP URL format</small>" +
     "  </div>" +
     "</form>" +
     "<button id=\"btn_execute\" class=\"btn btn-primary\">Execute</button>";
 
   var ftp_gui =
-    "<h3>PALMS files</h3>" +
-    "<p>Execution output files are available in your personal FTP area, you can access in <strong>read-only</strong> mode " +
-    "by pressing the 'FILES' button. For a detailed list of performed execution, press the 'LIST' button " +
-    "or you can select an alternative model or parameters files and upload it with the 'UPLOAD' button." +
-    " Finally to remove any PALMS submission and deallocate your FTP server press the 'RELEASE' button.</p>" +
+    "<h3>PALMS outputs</h3>" +
+    "<p>Output files are available in your personal Cloud area.</p>" + 
+    "<p>You can access them in <strong>read-only</strong> mode " +
+    "by pressing the <b>FILES</b> button.</p>" +
+    "<p>For a detailed list of performed executions, press the <b>LIST</b> button.</p>" +
+    "<p>You can choose an alternative model or parameters files and upload them in your Cloud area  pressing the <b>UPLOAD</b> button.</p>" +
+    "<p>Finally, to remove all PALMS submission outputs and delete your personal Cloud area, press the <b>DELETE</b> button.</p>" +
     "<center>" +
     "<table width=\"90%\">" +
     "  <tr>" +
     "    <td><button id=\"btn_files\" class=\"btn btn-primary\">FILES</button></td>" +
     "    <td><button id=\"btn_list\" class=\"btn btn-primary\">LIST</button></td>" +
     "    <td><button id=\"btn_upload\" class=\"btn btn-primary\">UPLOAD</button></td>" +
-    "    <td><button id=\"btn_release\" class=\"btn btn-danger\">RELEASE</button></td>" +
+    "    <td><button id=\"btn_release\" class=\"btn btn-danger\">DELETE</button></td>" +
     "  </tr>" +
     "</table>" +
     "</center>";
