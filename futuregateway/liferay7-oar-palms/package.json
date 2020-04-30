@@ -1,6 +1,6 @@
 {
 	"dependencies": {
-		"jquery": "3.2.1"
+		"jquery": "3.5.0"
 	},
 	"devDependencies": {
 		"babel-cli": "6.26.0",
